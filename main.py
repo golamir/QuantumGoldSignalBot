@@ -4,7 +4,7 @@ from telegram import Bot
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 async def main():
