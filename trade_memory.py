@@ -6,7 +6,7 @@ from datetime import datetime
 FILE = "trade_history.csv"
 
 
-def save_trade(signal, price, confidence, sl, tp):
+def save_trade(signal, price, confidence, stop_loss, take_profit):
 
     file_exists = os.path.isfile(FILE)
 
@@ -29,8 +29,8 @@ def save_trade(signal, price, confidence, sl, tp):
             signal,
             price,
             confidence,
-            sl,
-            tp
+            stop_loss,
+            take_profit
         ])
 
 
