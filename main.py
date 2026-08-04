@@ -1,5 +1,8 @@
 import os
 import asyncio
+import csv
+from datetime import datetime
+
 import yfinance as yf
 import ta
 
@@ -9,152 +12,139 @@ from telegram import Bot
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+FILE = "signals.csv"
+
+
+def save_signal(data):
+    file_exists = os.path.isfile(FILE)
+
+    with open(FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+
+        if not file_exists:
+            writer.writerow([
+                "time",
+                "price",
+                "signal",
+                "confidence",
+                "rsi",
+                "ema50",
+                "ema200",
+                "macd"
+            ])
+
+        writer.writerow(data)
+
 
 def analyze_gold():
-    try:
-        data = yf.download(
-            "GC=F",
-            period="30d",
-            interval="15m",
-            progress=False
-        )
 
-        if data.empty:
-            return "❌ No gold data received"
+    data = yf.download(
+        "GC=F",
+        period="30d",
+        interval="15m",
+        progress=False
+    )
 
-        close = data["Close"]
-        high = data["High"]
-        low = data["Low"]
-        open_price = data["Open"]
-
-        if hasattr(close, "columns"):
-            close = close.iloc[:, 0]
-            high = high.iloc[:, 0]
-            low = low.iloc[:, 0]
-            open_price = open_price.iloc[:, 0]
+    if data.empty:
+        return "❌ No data"
 
 
-        ema50 = ta.trend.ema_indicator(close, 50)
-        ema200 = ta.trend.ema_indicator(close, 200)
+    close = data["Close"]
 
-        rsi = ta.momentum.rsi(close, 14)
-
-        macd = ta.trend.MACD(close)
-
-        atr = ta.volatility.average_true_range(
-            high,
-            low,
-            close,
-            14
-        )
+    if hasattr(close, "columns"):
+        close = close.iloc[:,0]
 
 
-        price = float(close.iloc[-1])
-        e50 = float(ema50.iloc[-1])
-        e200 = float(ema200.iloc[-1])
-        r = float(rsi.iloc[-1])
-        macd_line = float(macd.macd().iloc[-1])
-        macd_sig = float(macd.macd_signal().iloc[-1])
-        atr_value = float(atr.iloc[-1])
+    ema50 = ta.trend.ema_indicator(close,50)
+    ema200 = ta.trend.ema_indicator(close,200)
+    rsi = ta.momentum.rsi(close,14)
+
+    macd = ta.trend.MACD(close)
 
 
-        score = 0
-        factors = []
+    price = float(close.iloc[-1])
+    e50 = float(ema50.iloc[-1])
+    e200 = float(ema200.iloc[-1])
+    r = float(rsi.iloc[-1])
+
+    m = float(macd.macd().iloc[-1])
+    ms = float(macd.macd_signal().iloc[-1])
 
 
-        # Trend 25%
-        if e50 > e200:
-            score += 25
-            factors.append("✅ EMA Trend +25")
-        else:
-            score -= 25
-            factors.append("❌ EMA Trend -25")
+    score = 0
 
 
-        # MACD 25%
-        if macd_line > macd_sig:
-            score += 25
-            factors.append("✅ MACD +25")
-        else:
-            score -= 25
-            factors.append("❌ MACD -25")
+    if e50 > e200:
+        score += 25
+
+    else:
+        score -= 25
 
 
-        # RSI 15%
-        if 50 < r < 70:
-            score += 15
-            factors.append("✅ RSI +15")
-        elif 30 < r < 50:
-            score -= 15
-            factors.append("❌ RSI -15")
+    if m > ms:
+        score += 25
+
+    else:
+        score -= 25
 
 
-        # ATR 15
-        if atr_value > 0:
-            score += 15
-            factors.append("✅ Volatility OK +15")
+    if r > 50:
+        score += 25
+
+    else:
+        score -= 25
 
 
-        # Candle 20
-        o = float(open_price.iloc[-1])
-        c = float(close.iloc[-1])
-
-        if c > o:
-            score += 20
-            factors.append("✅ Bullish Candle +20")
-        else:
-            score -= 20
-            factors.append("❌ Bearish Candle -20")
+    if price > e50:
+        score += 25
 
 
-        confidence = max(0, min(abs(score), 100))
+    confidence = max(0, abs(score))
 
 
-        if score >= 60:
-            signal = "🟢 STRONG BUY"
-        elif score <= -60:
-            signal = "🔴 STRONG SELL"
-        else:
-            signal = "⚪ WAIT"
+    if score >= 50:
+        signal = "🟢 BUY"
+
+    elif score <= -50:
+        signal = "🔴 SELL"
+
+    else:
+        signal = "⚪ WAIT"
 
 
-        return f"""
+    save_signal([
+        datetime.now(),
+        price,
+        signal,
+        confidence,
+        r,
+        e50,
+        e200,
+        m
+    ])
+
+
+    return f"""
 🥇 QuantumGold AI Signal
 
 XAU/USD
 
-Signal:
-{signal}
+Signal: {signal}
 
-AI Confidence:
-{confidence}%
+Confidence: {confidence}%
 
-Price:
-{price:.2f}
+Price: {price:.2f}
 
-EMA50:
-{e50:.2f}
+RSI: {r:.2f}
 
-EMA200:
-{e200:.2f}
+EMA50: {e50:.2f}
 
-RSI:
-{r:.2f}
+EMA200: {e200:.2f}
 
-ATR:
-{atr_value:.2f}
+MACD: {m:.4f}
 
-
-Factors:
-{"\n".join(factors)}
-
-Timeframe:
-M15
+🧠 Signal saved
 """
-
-
-    except Exception as e:
-        return f"❌ Error:\n{e}"
 
 
 async def main():
@@ -168,7 +158,7 @@ async def main():
         text=message
     )
 
-    print("AI Scoring Signal sent")
+    print("Saved and sent")
 
 
 if __name__ == "__main__":
