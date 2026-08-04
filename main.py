@@ -5,6 +5,7 @@ import ta
 
 from telegram import Bot
 from news_filter import check_news
+from trade_memory import save_trade, get_trade_count
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -12,6 +13,7 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 def get_data(symbol):
+
     data = yf.download(
         symbol,
         period="30d",
@@ -22,21 +24,18 @@ def get_data(symbol):
     if data.empty:
         return None
 
-    close = data["Close"]
-
-    if hasattr(close, "columns"):
-        close = close.iloc[:, 0]
-
     return data
 
 
 def analyze_gold():
 
     try:
+
         news = check_news()
 
         gold = get_data("GC=F")
         dxy_data = get_data("DX-Y.NYB")
+
 
         if gold is None:
             return "❌ Gold data unavailable"
@@ -46,16 +45,17 @@ def analyze_gold():
         high = gold["High"]
         low = gold["Low"]
 
+
         if hasattr(close, "columns"):
-            close = close.iloc[:, 0]
-            high = high.iloc[:, 0]
-            low = low.iloc[:, 0]
+            close = close.iloc[:,0]
+            high = high.iloc[:,0]
+            low = low.iloc[:,0]
 
 
-        ema50 = ta.trend.ema_indicator(close, 50)
-        ema200 = ta.trend.ema_indicator(close, 200)
+        ema50 = ta.trend.ema_indicator(close,50)
+        ema200 = ta.trend.ema_indicator(close,200)
 
-        rsi = ta.momentum.rsi(close, 14)
+        rsi = ta.momentum.rsi(close,14)
 
         macd = ta.trend.MACD(close)
 
@@ -127,28 +127,37 @@ def analyze_gold():
 
 
         if score >= 50:
+
             signal = "🟢 BUY"
 
             stop_loss = price - (atr_value * 2)
-            take1 = price + (atr_value * 2)
-            take2 = price + (atr_value * 3)
+            take_profit = price + (atr_value * 2)
 
         elif score <= -50:
+
             signal = "🔴 SELL"
 
             stop_loss = price + (atr_value * 2)
-            take1 = price - (atr_value * 2)
-            take2 = price - (atr_value * 3)
+            take_profit = price - (atr_value * 2)
 
         else:
+
             signal = "⚪ WAIT"
 
             stop_loss = 0
-            take1 = 0
-            take2 = 0
+            take_profit = 0
 
 
         confidence = abs(score)
+
+
+        save_trade(
+            signal,
+            price,
+            confidence,
+            stop_loss,
+            take_profit
+        )
 
 
         return f"""
@@ -168,21 +177,14 @@ Entry:
 Stop Loss:
 {stop_loss:.2f}
 
-Take Profit 1:
-{take1:.2f}
+Take Profit:
+{take_profit:.2f}
 
-Take Profit 2:
-{take2:.2f}
-
+Stored Signals:
+{get_trade_count()}
 
 ATR:
 {atr_value:.2f}
-
-EMA50:
-{e50:.2f}
-
-EMA200:
-{e200:.2f}
 
 RSI:
 {r:.2f}
@@ -190,10 +192,8 @@ RSI:
 MACD:
 {m:.4f}
 
-
 News:
 {news["message"]}
-
 
 Reasons:
 {"\n".join(reasons)}
@@ -218,7 +218,7 @@ async def main():
         text=message
     )
 
-    print("ATR Risk Signal sent")
+    print("Memory AI Signal sent")
 
 
 if __name__ == "__main__":
