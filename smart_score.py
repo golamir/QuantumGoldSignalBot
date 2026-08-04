@@ -61,12 +61,17 @@ def calculate_score(
 
 
     if score >= 80:
+
         decision = "✅ Strong setup"
 
-    elif score >= 60:
+
+    elif score >= 70:
+
         decision = "⚠️ Medium setup"
 
+
     else:
+
         decision = "❌ Weak setup"
 
 
