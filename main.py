@@ -1,1 +1,1 @@
-print("QuantumGoldSignalBot started")
+
