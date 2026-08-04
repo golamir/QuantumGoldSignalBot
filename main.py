@@ -1,8 +1,5 @@
 import os
 import asyncio
-import csv
-from datetime import datetime
-
 import yfinance as yf
 import ta
 
@@ -12,139 +9,148 @@ from telegram import Bot
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-FILE = "signals.csv"
 
-
-def save_signal(data):
-    file_exists = os.path.isfile(FILE)
-
-    with open(FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-
-        if not file_exists:
-            writer.writerow([
-                "time",
-                "price",
-                "signal",
-                "confidence",
-                "rsi",
-                "ema50",
-                "ema200",
-                "macd"
-            ])
-
-        writer.writerow(data)
-
-
-def analyze_gold():
-
+def get_data(symbol):
     data = yf.download(
-        "GC=F",
+        symbol,
         period="30d",
         interval="15m",
         progress=False
     )
 
     if data.empty:
-        return "❌ No data"
-
+        return None
 
     close = data["Close"]
 
     if hasattr(close, "columns"):
-        close = close.iloc[:,0]
+        close = close.iloc[:, 0]
+
+    return close
 
 
-    ema50 = ta.trend.ema_indicator(close,50)
-    ema200 = ta.trend.ema_indicator(close,200)
-    rsi = ta.momentum.rsi(close,14)
+def analyze_gold():
 
-    macd = ta.trend.MACD(close)
+    try:
+        # Gold
+        gold = get_data("GC=F")
 
-
-    price = float(close.iloc[-1])
-    e50 = float(ema50.iloc[-1])
-    e200 = float(ema200.iloc[-1])
-    r = float(rsi.iloc[-1])
-
-    m = float(macd.macd().iloc[-1])
-    ms = float(macd.macd_signal().iloc[-1])
+        # Dollar Index
+        dxy = get_data("DX-Y.NYB")
 
 
-    score = 0
+        if gold is None:
+            return "❌ Gold data unavailable"
+
+        price = float(gold.iloc[-1])
 
 
-    if e50 > e200:
-        score += 25
+        ema50 = ta.trend.ema_indicator(
+            gold, 50
+        )
 
-    else:
-        score -= 25
+        ema200 = ta.trend.ema_indicator(
+            gold, 200
+        )
 
-
-    if m > ms:
-        score += 25
-
-    else:
-        score -= 25
-
-
-    if r > 50:
-        score += 25
-
-    else:
-        score -= 25
+        rsi = ta.momentum.rsi(
+            gold, 14
+        )
 
 
-    if price > e50:
-        score += 25
+        e50 = float(ema50.iloc[-1])
+        e200 = float(ema200.iloc[-1])
+        r = float(rsi.iloc[-1])
 
 
-    confidence = max(0, abs(score))
+        score = 0
+        reasons = []
 
 
-    if score >= 50:
-        signal = "🟢 BUY"
-
-    elif score <= -50:
-        signal = "🔴 SELL"
-
-    else:
-        signal = "⚪ WAIT"
-
-
-    save_signal([
-        datetime.now(),
-        price,
-        signal,
-        confidence,
-        r,
-        e50,
-        e200,
-        m
-    ])
+        # Gold trend
+        if e50 > e200:
+            score += 25
+            reasons.append("✅ Gold trend bullish")
+        else:
+            score -= 25
+            reasons.append("❌ Gold trend bearish")
 
 
-    return f"""
+        # RSI
+        if r > 50:
+            score += 15
+            reasons.append("✅ RSI positive")
+        else:
+            score -= 15
+            reasons.append("⚠️ RSI weak")
+
+
+        # DXY filter
+        dxy_status = "Unknown"
+
+        if dxy is not None:
+
+            dxy_now = float(dxy.iloc[-1])
+            dxy_old = float(dxy.iloc[-20])
+
+            if dxy_now < dxy_old:
+                score += 20
+                dxy_status = "🔻 DXY falling (Gold support)"
+            else:
+                score -= 20
+                dxy_status = "🔺 DXY rising (Gold pressure)"
+
+
+        if score >= 40:
+            signal = "🟢 BUY"
+
+        elif score <= -40:
+            signal = "🔴 SELL"
+
+        else:
+            signal = "⚪ WAIT"
+
+
+        confidence = abs(score)
+
+
+        return f"""
 🥇 QuantumGold AI Signal
 
 XAU/USD
 
-Signal: {signal}
+Signal:
+{signal}
 
-Confidence: {confidence}%
+AI Confidence:
+{confidence}%
 
-Price: {price:.2f}
+Price:
+{price:.2f}
 
-RSI: {r:.2f}
+EMA50:
+{e50:.2f}
 
-EMA50: {e50:.2f}
+EMA200:
+{e200:.2f}
 
-EMA200: {e200:.2f}
+RSI:
+{r:.2f}
 
-MACD: {m:.4f}
+DXY:
+{dxy_status}
 
-🧠 Signal saved
+
+Analysis:
+{"\n".join(reasons)}
+
+Timeframe:
+M15
 """
+
+
+    except Exception as e:
+        return f"❌ Error:\n{e}"
 
 
 async def main():
@@ -158,7 +164,7 @@ async def main():
         text=message
     )
 
-    print("Saved and sent")
+    print("DXY AI Signal sent")
 
 
 if __name__ == "__main__":
