@@ -4,9 +4,11 @@ import yfinance as yf
 import ta
 
 from telegram import Bot
+
 from news_filter import check_news
 from trade_memory import save_trade, get_trade_count
 from live_price import get_live_gold_price
+from support_resistance import find_support_resistance
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -54,12 +56,28 @@ def analyze_gold():
             low = low.iloc[:, 0]
 
 
-        ema50 = ta.trend.ema_indicator(close, 50)
-        ema200 = ta.trend.ema_indicator(close, 200)
+        sr = find_support_resistance(close)
 
-        rsi = ta.momentum.rsi(close, 14)
+
+        ema50 = ta.trend.ema_indicator(
+            close,
+            window=50
+        )
+
+        ema200 = ta.trend.ema_indicator(
+            close,
+            window=200
+        )
+
+
+        rsi = ta.momentum.rsi(
+            close,
+            window=14
+        )
+
 
         macd = ta.trend.MACD(close)
+
 
         atr = ta.volatility.average_true_range(
             high,
@@ -73,18 +91,21 @@ def analyze_gold():
 
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
+
         r = float(rsi.iloc[-1])
 
         m = float(macd.macd().iloc[-1])
+
         ms = float(macd.macd_signal().iloc[-1])
 
         atr_value = float(atr.iloc[-1])
 
 
         score = 0
+
         reasons = []
 
-
+       
         if e50 > e200:
             score += 25
             reasons.append("✅ EMA bullish")
@@ -107,6 +128,14 @@ def analyze_gold():
         else:
             score -= 25
             reasons.append("❌ MACD negative")
+
+
+        if sr["near_support"]:
+            reasons.append("🟢 Price near support")
+
+
+        if sr["near_resistance"]:
+            reasons.append("🔴 Price near resistance")
 
 
         if dxy_data is not None:
@@ -132,19 +161,27 @@ def analyze_gold():
         if score >= 50:
 
             signal = "🟢 BUY"
+
             stop_loss = price - (atr_value * 2)
+
             take_profit = price + (atr_value * 2)
+
 
         elif score <= -50:
 
             signal = "🔴 SELL"
+
             stop_loss = price + (atr_value * 2)
+
             take_profit = price - (atr_value * 2)
+
 
         else:
 
             signal = "⚪ WAIT"
+
             stop_loss = 0
+
             take_profit = 0
 
 
@@ -186,6 +223,12 @@ Take Profit:
 Stored Signals:
 {get_trade_count()}
 
+Support:
+{sr['support']:.2f}
+
+Resistance:
+{sr['resistance']:.2f}
+
 ATR:
 {atr_value:.2f}
 
@@ -207,6 +250,7 @@ M15
 
 
     except Exception as e:
+
         return f"❌ Error:\n{e}"
 
 
@@ -223,8 +267,10 @@ async def main():
         text=message
     )
 
-    print("Live price AI signal sent")
+    print("Signal sent successfully")
 
 
 if __name__ == "__main__":
+
     asyncio.run(main())
+
