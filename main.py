@@ -9,6 +9,7 @@ from news_filter import check_news
 from trade_memory import save_trade, get_trade_count
 from live_price import get_live_gold_price
 from support_resistance import find_support_resistance
+from entry_filter import check_entry
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -105,7 +106,7 @@ def analyze_gold():
 
         reasons = []
 
-       
+
         if e50 > e200:
             score += 25
             reasons.append("✅ EMA bullish")
@@ -128,14 +129,6 @@ def analyze_gold():
         else:
             score -= 25
             reasons.append("❌ MACD negative")
-
-
-        if sr["near_support"]:
-            reasons.append("🟢 Price near support")
-
-
-        if sr["near_resistance"]:
-            reasons.append("🔴 Price near resistance")
 
 
         if dxy_data is not None:
@@ -161,31 +154,38 @@ def analyze_gold():
         if score >= 50:
 
             signal = "🟢 BUY"
-
             stop_loss = price - (atr_value * 2)
-
             take_profit = price + (atr_value * 2)
 
 
         elif score <= -50:
 
             signal = "🔴 SELL"
-
             stop_loss = price + (atr_value * 2)
-
             take_profit = price - (atr_value * 2)
 
 
         else:
 
             signal = "⚪ WAIT"
-
             stop_loss = 0
-
             take_profit = 0
 
 
         confidence = abs(score)
+
+
+        entry = check_entry(
+            signal,
+            price,
+            sr["support"],
+            sr["resistance"],
+            r,
+            confidence
+        )
+
+
+        entry_reasons = "\n".join(entry["reasons"])
 
 
         save_trade(
@@ -224,10 +224,16 @@ Stored Signals:
 {get_trade_count()}
 
 Support:
-{sr['support']:.2f}
+{sr["support"]:.2f}
 
 Resistance:
-{sr['resistance']:.2f}
+{sr["resistance"]:.2f}
+
+Entry Quality:
+{entry["quality"]}
+
+Entry Analysis:
+{entry_reasons}
 
 ATR:
 {atr_value:.2f}
@@ -273,4 +279,3 @@ async def main():
 if __name__ == "__main__":
 
     asyncio.run(main())
-
