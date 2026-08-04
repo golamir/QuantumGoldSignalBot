@@ -14,7 +14,7 @@ def analyze_gold():
     try:
         data = yf.download(
             "GC=F",
-            period="20d",
+            period="30d",
             interval="15m",
             progress=False
         )
@@ -23,25 +23,21 @@ def analyze_gold():
             return "❌ No gold data received"
 
         close = data["Close"]
+        high = data["High"]
+        low = data["Low"]
+        open_price = data["Open"]
 
         if hasattr(close, "columns"):
             close = close.iloc[:, 0]
-
-        high = data["High"]
-        low = data["Low"]
-
-        if hasattr(high, "columns"):
             high = high.iloc[:, 0]
-
-        if hasattr(low, "columns"):
             low = low.iloc[:, 0]
+            open_price = open_price.iloc[:, 0]
 
 
-        # Indicators
-        ema50 = ta.trend.ema_indicator(close, window=50)
-        ema200 = ta.trend.ema_indicator(close, window=200)
+        ema50 = ta.trend.ema_indicator(close, 50)
+        ema200 = ta.trend.ema_indicator(close, 200)
 
-        rsi = ta.momentum.rsi(close, window=14)
+        rsi = ta.momentum.rsi(close, 14)
 
         macd = ta.trend.MACD(close)
 
@@ -49,7 +45,7 @@ def analyze_gold():
             high,
             low,
             close,
-            window=14
+            14
         )
 
 
@@ -57,58 +53,69 @@ def analyze_gold():
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
         r = float(rsi.iloc[-1])
-        m = float(macd.macd().iloc[-1])
-        ms = float(macd.macd_signal().iloc[-1])
-        a = float(atr.iloc[-1])
-
-
-        # Support / Resistance
-        support = float(low.tail(50).min())
-        resistance = float(high.tail(50).max())
+        macd_line = float(macd.macd().iloc[-1])
+        macd_sig = float(macd.macd_signal().iloc[-1])
+        atr_value = float(atr.iloc[-1])
 
 
         score = 0
-        reasons = []
+        factors = []
 
 
+        # Trend 25%
         if e50 > e200:
-            score += 1
-            reasons.append("✅ EMA bullish")
+            score += 25
+            factors.append("✅ EMA Trend +25")
         else:
-            score -= 1
-            reasons.append("❌ EMA bearish")
+            score -= 25
+            factors.append("❌ EMA Trend -25")
 
 
-        if r > 50:
-            score += 1
-            reasons.append("✅ RSI buyers")
+        # MACD 25%
+        if macd_line > macd_sig:
+            score += 25
+            factors.append("✅ MACD +25")
         else:
-            score -= 1
-            reasons.append("⚠️ RSI weak")
+            score -= 25
+            factors.append("❌ MACD -25")
 
 
-        if m > ms:
-            score += 1
-            reasons.append("✅ MACD positive")
+        # RSI 15%
+        if 50 < r < 70:
+            score += 15
+            factors.append("✅ RSI +15")
+        elif 30 < r < 50:
+            score -= 15
+            factors.append("❌ RSI -15")
+
+
+        # ATR 15
+        if atr_value > 0:
+            score += 15
+            factors.append("✅ Volatility OK +15")
+
+
+        # Candle 20
+        o = float(open_price.iloc[-1])
+        c = float(close.iloc[-1])
+
+        if c > o:
+            score += 20
+            factors.append("✅ Bullish Candle +20")
         else:
-            score -= 1
-            reasons.append("❌ MACD negative")
+            score -= 20
+            factors.append("❌ Bearish Candle -20")
 
 
-        if price > support and price < resistance:
-            score += 1
-            reasons.append("✅ Good market zone")
+        confidence = max(0, min(abs(score), 100))
 
 
-        if score >= 3:
-            signal = "🟢 BUY"
-        elif score <= -3:
-            signal = "🔴 SELL"
+        if score >= 60:
+            signal = "🟢 STRONG BUY"
+        elif score <= -60:
+            signal = "🔴 STRONG SELL"
         else:
             signal = "⚪ WAIT"
-
-
-        confidence = abs(score) / 4 * 100
 
 
         return f"""
@@ -116,30 +123,33 @@ def analyze_gold():
 
 XAU/USD
 
-Signal: {signal}
+Signal:
+{signal}
 
-Confidence: {confidence:.0f}%
+AI Confidence:
+{confidence}%
 
-Price: {price:.2f}
+Price:
+{price:.2f}
 
-Support: {support:.2f}
-Resistance: {resistance:.2f}
+EMA50:
+{e50:.2f}
 
-EMA50: {e50:.2f}
-EMA200: {e200:.2f}
+EMA200:
+{e200:.2f}
 
-RSI: {r:.2f}
-
-MACD:
-{m:.4f}
+RSI:
+{r:.2f}
 
 ATR:
-{a:.2f}
+{atr_value:.2f}
 
-Reasons:
-{"\n".join(reasons)}
 
-Timeframe: M15
+Factors:
+{"\n".join(factors)}
+
+Timeframe:
+M15
 """
 
 
@@ -158,7 +168,7 @@ async def main():
         text=message
     )
 
-    print("Advanced Signal sent")
+    print("AI Scoring Signal sent")
 
 
 if __name__ == "__main__":
