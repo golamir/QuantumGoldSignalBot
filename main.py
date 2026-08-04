@@ -4,6 +4,7 @@ import yfinance as yf
 import ta
 
 from telegram import Bot
+from news_filter import check_news
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -32,51 +33,43 @@ def get_data(symbol):
 def analyze_gold():
 
     try:
-        # Gold
+        news = check_news()
+
         gold = get_data("GC=F")
-
-        # Dollar Index
         dxy = get_data("DX-Y.NYB")
-
 
         if gold is None:
             return "❌ Gold data unavailable"
 
+
+        ema50 = ta.trend.ema_indicator(gold, 50)
+        ema200 = ta.trend.ema_indicator(gold, 200)
+        rsi = ta.momentum.rsi(gold, 14)
+
+        macd = ta.trend.MACD(gold)
+
+
         price = float(gold.iloc[-1])
-
-
-        ema50 = ta.trend.ema_indicator(
-            gold, 50
-        )
-
-        ema200 = ta.trend.ema_indicator(
-            gold, 200
-        )
-
-        rsi = ta.momentum.rsi(
-            gold, 14
-        )
-
-
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
         r = float(rsi.iloc[-1])
+
+        m = float(macd.macd().iloc[-1])
+        ms = float(macd.macd_signal().iloc[-1])
 
 
         score = 0
         reasons = []
 
 
-        # Gold trend
         if e50 > e200:
             score += 25
-            reasons.append("✅ Gold trend bullish")
+            reasons.append("✅ EMA bullish")
         else:
             score -= 25
-            reasons.append("❌ Gold trend bearish")
+            reasons.append("❌ EMA bearish")
 
 
-        # RSI
         if r > 50:
             score += 15
             reasons.append("✅ RSI positive")
@@ -85,26 +78,32 @@ def analyze_gold():
             reasons.append("⚠️ RSI weak")
 
 
-        # DXY filter
-        dxy_status = "Unknown"
+        if m > ms:
+            score += 25
+            reasons.append("✅ MACD positive")
+        else:
+            score -= 25
+            reasons.append("❌ MACD negative")
+
 
         if dxy is not None:
-
-            dxy_now = float(dxy.iloc[-1])
-            dxy_old = float(dxy.iloc[-20])
-
-            if dxy_now < dxy_old:
-                score += 20
-                dxy_status = "🔻 DXY falling (Gold support)"
+            if float(dxy.iloc[-1]) < float(dxy.iloc[-20]):
+                score += 15
+                reasons.append("✅ DXY supports gold")
             else:
-                score -= 20
-                dxy_status = "🔺 DXY rising (Gold pressure)"
+                score -= 15
+                reasons.append("❌ DXY pressure")
 
 
-        if score >= 40:
+        if news["risk"] == "HIGH":
+            score -= 20
+            reasons.append("⚠️ News risk")
+
+
+        if score >= 50:
             signal = "🟢 BUY"
 
-        elif score <= -40:
+        elif score <= -50:
             signal = "🔴 SELL"
 
         else:
@@ -122,7 +121,7 @@ XAU/USD
 Signal:
 {signal}
 
-AI Confidence:
+Confidence:
 {confidence}%
 
 Price:
@@ -137,11 +136,14 @@ EMA200:
 RSI:
 {r:.2f}
 
-DXY:
-{dxy_status}
+MACD:
+{m:.4f}
+
+News Filter:
+{news["message"]}
 
 
-Analysis:
+Reasons:
 {"\n".join(reasons)}
 
 Timeframe:
@@ -164,7 +166,7 @@ async def main():
         text=message
     )
 
-    print("DXY AI Signal sent")
+    print("Advanced AI Signal sent")
 
 
 if __name__ == "__main__":
