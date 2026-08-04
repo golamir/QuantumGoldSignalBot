@@ -6,6 +6,9 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 async def main():
+    print("Token exists:", bool(TOKEN))
+    print("Chat ID exists:", bool(CHAT_ID))
+
     if not TOKEN or not CHAT_ID:
         print("Missing Telegram settings")
         return
