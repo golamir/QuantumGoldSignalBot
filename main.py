@@ -49,15 +49,15 @@ def analyze_gold():
 
 
         if hasattr(close, "columns"):
-            close = close.iloc[:,0]
-            high = high.iloc[:,0]
-            low = low.iloc[:,0]
+            close = close.iloc[:, 0]
+            high = high.iloc[:, 0]
+            low = low.iloc[:, 0]
 
 
-        ema50 = ta.trend.ema_indicator(close,50)
-        ema200 = ta.trend.ema_indicator(close,200)
+        ema50 = ta.trend.ema_indicator(close, 50)
+        ema200 = ta.trend.ema_indicator(close, 200)
 
-        rsi = ta.momentum.rsi(close,14)
+        rsi = ta.momentum.rsi(close, 14)
 
         macd = ta.trend.MACD(close)
 
@@ -114,7 +114,7 @@ def analyze_gold():
             dxy = dxy_data["Close"]
 
             if hasattr(dxy, "columns"):
-                dxy = dxy.iloc[:,0]
+                dxy = dxy.iloc[:, 0]
 
             if float(dxy.iloc[-1]) < float(dxy.iloc[-20]):
                 score += 15
@@ -130,16 +130,19 @@ def analyze_gold():
 
 
         if score >= 50:
+
             signal = "🟢 BUY"
-            stop_loss = price - atr_value * 2
-            take_profit = price + atr_value * 2
+            stop_loss = price - (atr_value * 2)
+            take_profit = price + (atr_value * 2)
 
         elif score <= -50:
+
             signal = "🔴 SELL"
-            stop_loss = price + atr_value * 2
-            take_profit = price - atr_value * 2
+            stop_loss = price + (atr_value * 2)
+            take_profit = price - (atr_value * 2)
 
         else:
+
             signal = "⚪ WAIT"
             stop_loss = 0
             take_profit = 0
@@ -155,6 +158,9 @@ def analyze_gold():
             stop_loss,
             take_profit
         )
+
+
+        reasons_text = "\n".join(reasons)
 
 
         return f"""
@@ -193,7 +199,7 @@ News:
 {news["message"]}
 
 Reasons:
-{"\n".join(reasons)}
+{reasons_text}
 
 Timeframe:
 M15
@@ -206,6 +212,8 @@ M15
 
 async def main():
 
+    print("Starting QuantumGold AI")
+
     bot = Bot(token=TOKEN)
 
     message = analyze_gold()
@@ -214,7 +222,6 @@ async def main():
         chat_id=CHAT_ID,
         text=message
     )
-
 
     print("Live price AI signal sent")
 
