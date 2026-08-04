@@ -3,16 +3,17 @@ import requests
 
 def get_gold_price():
 
-    url = "https://api.metals.live/v1/spot/gold"
+    url = "https://api.gold-api.com/price/XAU"
 
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(
+            url,
+            timeout=10
+        )
 
         data = response.json()
 
-        price = data[0]["price"]
-
-        return price
+        return data["price"]
 
     except Exception as e:
         return f"Error: {e}"
