@@ -6,6 +6,7 @@ import ta
 from telegram import Bot
 from news_filter import check_news
 from trade_memory import save_trade, get_trade_count
+from live_price import get_live_gold_price
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -36,6 +37,7 @@ def analyze_gold():
         gold = get_data("GC=F")
         dxy_data = get_data("DX-Y.NYB")
 
+        live_price = get_live_gold_price()
 
         if gold is None:
             return "❌ Gold data unavailable"
@@ -67,7 +69,8 @@ def analyze_gold():
         )
 
 
-        price = float(close.iloc[-1])
+        price = live_price if live_price else float(close.iloc[-1])
+
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
         r = float(rsi.iloc[-1])
@@ -127,23 +130,17 @@ def analyze_gold():
 
 
         if score >= 50:
-
             signal = "🟢 BUY"
-
-            stop_loss = price - (atr_value * 2)
-            take_profit = price + (atr_value * 2)
+            stop_loss = price - atr_value * 2
+            take_profit = price + atr_value * 2
 
         elif score <= -50:
-
             signal = "🔴 SELL"
-
-            stop_loss = price + (atr_value * 2)
-            take_profit = price - (atr_value * 2)
+            stop_loss = price + atr_value * 2
+            take_profit = price - atr_value * 2
 
         else:
-
             signal = "⚪ WAIT"
-
             stop_loss = 0
             take_profit = 0
 
@@ -171,7 +168,7 @@ Signal:
 Confidence:
 {confidence}%
 
-Entry:
+Live Price:
 {price:.2f}
 
 Stop Loss:
@@ -218,7 +215,8 @@ async def main():
         text=message
     )
 
-    print("Memory AI Signal sent")
+
+    print("Live price AI signal sent")
 
 
 if __name__ == "__main__":
