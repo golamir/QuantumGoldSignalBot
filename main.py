@@ -1,7 +1,6 @@
 import os
 import asyncio
 import yfinance as yf
-import pandas as pd
 import ta
 
 from telegram import Bot
@@ -54,7 +53,6 @@ def analyze_gold():
     if 50 < last["RSI"] < 70:
         score += 1
         reasons.append("✅ RSI مناسب")
-
     elif 30 < last["RSI"] < 50:
         score -= 1
         reasons.append("⚠️ RSI ضعیف")
@@ -66,6 +64,8 @@ def analyze_gold():
     else:
         signal = "⚪ NO SIGNAL"
 
+    reason_text = "\n".join(reasons)
+
     return f"""
 🥇 QuantumGold AI Signal
 
@@ -73,17 +73,16 @@ XAU/USD
 
 Signal: {signal}
 
-RSI: {last['RSI']:.2f}
+RSI: {float(last['RSI']):.2f}
 
 Score: {score}/3
 
 Reasons:
-{"\n".join(reasons)}
+{reason_text}
 """
 
 
 async def main():
-
     bot = Bot(token=TOKEN)
 
     message = analyze_gold()
