@@ -14,7 +14,7 @@ def analyze_gold():
     try:
         data = yf.download(
             "GC=F",
-            period="10d",
+            period="20d",
             interval="15m",
             progress=False
         )
@@ -27,6 +27,17 @@ def analyze_gold():
         if hasattr(close, "columns"):
             close = close.iloc[:, 0]
 
+        high = data["High"]
+        low = data["Low"]
+
+        if hasattr(high, "columns"):
+            high = high.iloc[:, 0]
+
+        if hasattr(low, "columns"):
+            low = low.iloc[:, 0]
+
+
+        # Indicators
         ema50 = ta.trend.ema_indicator(close, window=50)
         ema200 = ta.trend.ema_indicator(close, window=200)
 
@@ -34,36 +45,48 @@ def analyze_gold():
 
         macd = ta.trend.MACD(close)
 
-        macd_line = macd.macd()
-        macd_signal = macd.macd_signal()
+        atr = ta.volatility.average_true_range(
+            high,
+            low,
+            close,
+            window=14
+        )
+
 
         price = float(close.iloc[-1])
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
         r = float(rsi.iloc[-1])
-        m = float(macd_line.iloc[-1])
-        ms = float(macd_signal.iloc[-1])
+        m = float(macd.macd().iloc[-1])
+        ms = float(macd.macd_signal().iloc[-1])
+        a = float(atr.iloc[-1])
+
+
+        # Support / Resistance
+        support = float(low.tail(50).min())
+        resistance = float(high.tail(50).max())
+
 
         score = 0
         reasons = []
 
-        # Trend
+
         if e50 > e200:
             score += 1
-            reasons.append("✅ EMA trend bullish")
+            reasons.append("✅ EMA bullish")
         else:
             score -= 1
-            reasons.append("❌ EMA trend bearish")
+            reasons.append("❌ EMA bearish")
 
-        # RSI
-        if 50 < r < 70:
+
+        if r > 50:
             score += 1
-            reasons.append("✅ RSI supports buyers")
-        elif 30 < r < 50:
+            reasons.append("✅ RSI buyers")
+        else:
             score -= 1
-            reasons.append("⚠️ RSI supports sellers")
+            reasons.append("⚠️ RSI weak")
 
-        # MACD
+
         if m > ms:
             score += 1
             reasons.append("✅ MACD positive")
@@ -71,14 +94,22 @@ def analyze_gold():
             score -= 1
             reasons.append("❌ MACD negative")
 
-        if score >= 2:
+
+        if price > support and price < resistance:
+            score += 1
+            reasons.append("✅ Good market zone")
+
+
+        if score >= 3:
             signal = "🟢 BUY"
-        elif score <= -2:
+        elif score <= -3:
             signal = "🔴 SELL"
         else:
             signal = "⚪ WAIT"
 
-        confidence = abs(score) / 3 * 100
+
+        confidence = abs(score) / 4 * 100
+
 
         return f"""
 🥇 QuantumGold AI Signal
@@ -91,6 +122,9 @@ Confidence: {confidence:.0f}%
 
 Price: {price:.2f}
 
+Support: {support:.2f}
+Resistance: {resistance:.2f}
+
 EMA50: {e50:.2f}
 EMA200: {e200:.2f}
 
@@ -99,11 +133,15 @@ RSI: {r:.2f}
 MACD:
 {m:.4f}
 
+ATR:
+{a:.2f}
+
 Reasons:
 {"\n".join(reasons)}
 
 Timeframe: M15
 """
+
 
     except Exception as e:
         return f"❌ Error:\n{e}"
@@ -120,7 +158,7 @@ async def main():
         text=message
     )
 
-    print("AI Signal sent")
+    print("Advanced Signal sent")
 
 
 if __name__ == "__main__":
