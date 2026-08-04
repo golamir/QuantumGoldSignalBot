@@ -11,78 +11,92 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 def analyze_gold():
-    data = yf.download(
-        "GC=F",
-        period="5d",
-        interval="15m",
-        progress=False
-    )
+    try:
+        data = yf.download(
+            "GC=F",
+            period="10d",
+            interval="15m",
+            progress=False
+        )
 
-    if data.empty:
-        return "❌ دریافت اطلاعات طلا ناموفق بود"
+        if data.empty:
+            return "❌ داده طلا دریافت نشد"
 
-    close = data["Close"]
+        close = data["Close"]
 
-    data["EMA50"] = ta.trend.ema_indicator(close, window=50)
-    data["EMA200"] = ta.trend.ema_indicator(close, window=200)
-    data["RSI"] = ta.momentum.rsi(close, window=14)
+        ema50 = ta.trend.ema_indicator(
+            close,
+            window=50
+        )
 
-    macd = ta.trend.MACD(close)
-    data["MACD"] = macd.macd()
-    data["MACD_SIGNAL"] = macd.macd_signal()
+        ema200 = ta.trend.ema_indicator(
+            close,
+            window=200
+        )
 
-    last = data.iloc[-1]
+        rsi = ta.momentum.rsi(
+            close,
+            window=14
+        )
 
-    score = 0
-    reasons = []
+        last_price = float(close.iloc[-1])
+        last_ema50 = float(ema50.iloc[-1])
+        last_ema200 = float(ema200.iloc[-1])
+        last_rsi = float(rsi.iloc[-1])
 
-    if last["EMA50"] > last["EMA200"]:
-        score += 1
-        reasons.append("✅ Trend bullish")
-    else:
-        score -= 1
-        reasons.append("❌ Trend bearish")
+        score = 0
+        reasons = []
 
-    if last["MACD"] > last["MACD_SIGNAL"]:
-        score += 1
-        reasons.append("✅ MACD positive")
-    else:
-        score -= 1
-        reasons.append("❌ MACD negative")
+        if last_ema50 > last_ema200:
+            score += 1
+            reasons.append("✅ روند صعودی")
+        else:
+            score -= 1
+            reasons.append("❌ روند نزولی")
 
-    if 50 < last["RSI"] < 70:
-        score += 1
-        reasons.append("✅ RSI مناسب")
-    elif 30 < last["RSI"] < 50:
-        score -= 1
-        reasons.append("⚠️ RSI ضعیف")
+        if last_rsi > 50:
+            score += 1
+            reasons.append("✅ قدرت خریداران")
+        else:
+            score -= 1
+            reasons.append("⚠️ قدرت فروشندگان")
 
-    if score >= 2:
-        signal = "🟢 BUY"
-    elif score <= -2:
-        signal = "🔴 SELL"
-    else:
-        signal = "⚪ NO SIGNAL"
+        if score >= 2:
+            signal = "🟢 BUY"
+        elif score <= -2:
+            signal = "🔴 SELL"
+        else:
+            signal = "⚪ WAIT"
 
-    reason_text = "\n".join(reasons)
-
-    return f"""
+        return f"""
 🥇 QuantumGold AI Signal
 
-XAU/USD
+Symbol: XAU/USD
 
 Signal: {signal}
 
-RSI: {float(last['RSI']):.2f}
+Price: {last_price:.2f}
 
-Score: {score}/3
+EMA50: {last_ema50:.2f}
+EMA200: {last_ema200:.2f}
 
-Reasons:
-{reason_text}
+RSI: {last_rsi:.2f}
+
+Score: {score}/2
+
+Analysis:
+{"\n".join(reasons)}
 """
+
+    except Exception as e:
+        return f"❌ Analysis Error:\n{str(e)}"
 
 
 async def main():
+    if not TOKEN or not CHAT_ID:
+        print("Missing Telegram settings")
+        return
+
     bot = Bot(token=TOKEN)
 
     message = analyze_gold()
