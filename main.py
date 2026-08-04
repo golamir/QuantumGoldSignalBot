@@ -22,8 +22,8 @@ def get_data(symbol):
 
     data = yf.download(
         symbol,
-        period="30d",
-        interval="15m",
+        period="7d",
+        interval="5m",
         progress=False
     )
 
@@ -268,7 +268,7 @@ Reasons:
 {reasons_text}
 
 Timeframe:
-M15
+M5
 """
 
 
