@@ -1,8 +1,23 @@
 import os
+import asyncio
+from telegram import Bot
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-print("TOKEN exists:", TOKEN is not None)
-print("CHAT_ID exists:", CHAT_ID is not None)
-print("CHAT_ID length:", len(CHAT_ID) if CHAT_ID else 0)
+async def main():
+    if not TOKEN or not CHAT_ID:
+        print("Missing Telegram settings")
+        return
+
+    bot = Bot(token=TOKEN)
+
+    await bot.send_message(
+        chat_id=CHAT_ID,
+        text="✅ QuantumGoldSignalBot online!\n\nاتصال تلگرام موفق شد."
+    )
+
+    print("Message sent")
+
+if __name__ == "__main__":
+    asyncio.run(main())
