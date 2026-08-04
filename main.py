@@ -27,7 +27,7 @@ def get_data(symbol):
     if hasattr(close, "columns"):
         close = close.iloc[:, 0]
 
-    return close
+    return data
 
 
 def analyze_gold():
@@ -36,26 +36,46 @@ def analyze_gold():
         news = check_news()
 
         gold = get_data("GC=F")
-        dxy = get_data("DX-Y.NYB")
+        dxy_data = get_data("DX-Y.NYB")
 
         if gold is None:
             return "❌ Gold data unavailable"
 
 
-        ema50 = ta.trend.ema_indicator(gold, 50)
-        ema200 = ta.trend.ema_indicator(gold, 200)
-        rsi = ta.momentum.rsi(gold, 14)
+        close = gold["Close"]
+        high = gold["High"]
+        low = gold["Low"]
 
-        macd = ta.trend.MACD(gold)
+        if hasattr(close, "columns"):
+            close = close.iloc[:, 0]
+            high = high.iloc[:, 0]
+            low = low.iloc[:, 0]
 
 
-        price = float(gold.iloc[-1])
+        ema50 = ta.trend.ema_indicator(close, 50)
+        ema200 = ta.trend.ema_indicator(close, 200)
+
+        rsi = ta.momentum.rsi(close, 14)
+
+        macd = ta.trend.MACD(close)
+
+        atr = ta.volatility.average_true_range(
+            high,
+            low,
+            close,
+            14
+        )
+
+
+        price = float(close.iloc[-1])
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
         r = float(rsi.iloc[-1])
 
         m = float(macd.macd().iloc[-1])
         ms = float(macd.macd_signal().iloc[-1])
+
+        atr_value = float(atr.iloc[-1])
 
 
         score = 0
@@ -86,7 +106,13 @@ def analyze_gold():
             reasons.append("❌ MACD negative")
 
 
-        if dxy is not None:
+        if dxy_data is not None:
+
+            dxy = dxy_data["Close"]
+
+            if hasattr(dxy, "columns"):
+                dxy = dxy.iloc[:,0]
+
             if float(dxy.iloc[-1]) < float(dxy.iloc[-20]):
                 score += 15
                 reasons.append("✅ DXY supports gold")
@@ -103,11 +129,23 @@ def analyze_gold():
         if score >= 50:
             signal = "🟢 BUY"
 
+            stop_loss = price - (atr_value * 2)
+            take1 = price + (atr_value * 2)
+            take2 = price + (atr_value * 3)
+
         elif score <= -50:
             signal = "🔴 SELL"
 
+            stop_loss = price + (atr_value * 2)
+            take1 = price - (atr_value * 2)
+            take2 = price - (atr_value * 3)
+
         else:
             signal = "⚪ WAIT"
+
+            stop_loss = 0
+            take1 = 0
+            take2 = 0
 
 
         confidence = abs(score)
@@ -124,8 +162,21 @@ Signal:
 Confidence:
 {confidence}%
 
-Price:
+Entry:
 {price:.2f}
+
+Stop Loss:
+{stop_loss:.2f}
+
+Take Profit 1:
+{take1:.2f}
+
+Take Profit 2:
+{take2:.2f}
+
+
+ATR:
+{atr_value:.2f}
 
 EMA50:
 {e50:.2f}
@@ -139,7 +190,8 @@ RSI:
 MACD:
 {m:.4f}
 
-News Filter:
+
+News:
 {news["message"]}
 
 
@@ -166,7 +218,7 @@ async def main():
         text=message
     )
 
-    print("Advanced AI Signal sent")
+    print("ATR Risk Signal sent")
 
 
 if __name__ == "__main__":
