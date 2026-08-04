@@ -3,28 +3,28 @@ import asyncio
 from telegram import Bot
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
-async def send_message():
-    if not TOKEN or not CHAT_ID:
-        print("ERROR: TOKEN or CHAT_ID is missing")
-        return
+async def main():
+    print("Starting bot")
 
-    bot = Bot(token=TOKEN)
+    print("TOKEN exists:", bool(TOKEN))
+    print("CHAT_ID exists:", bool(CHAT_ID))
 
-    message = (
-        "✅ ربات با موفقیت اجرا شد\n"
-        "🤖 Telegram Bot is online"
-    )
+    try:
+        bot = Bot(token=TOKEN)
 
-    await bot.send_message(
-        chat_id=CHAT_ID,
-        text=message
-    )
+        await bot.send_message(
+            chat_id=CHAT_ID,
+            text="✅ QuantumGoldSignalBot وصل شد"
+        )
 
-    print("Message sent successfully")
+        print("Message sent successfully")
+
+    except Exception as e:
+        print("ERROR:", e)
 
 
 if __name__ == "__main__":
-    asyncio.run(send_message())
+    asyncio.run(main())
