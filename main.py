@@ -10,6 +10,7 @@ from trade_memory import save_trade, get_trade_count
 from live_price import get_live_gold_price
 from support_resistance import find_support_resistance
 from entry_filter import check_entry
+from smart_score import calculate_score
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -90,20 +91,19 @@ def analyze_gold():
 
         price = live_price if live_price else float(close.iloc[-1])
 
+
         e50 = float(ema50.iloc[-1])
         e200 = float(ema200.iloc[-1])
 
         r = float(rsi.iloc[-1])
 
         m = float(macd.macd().iloc[-1])
-
         ms = float(macd.macd_signal().iloc[-1])
 
         atr_value = float(atr.iloc[-1])
 
 
         score = 0
-
         reasons = []
 
 
@@ -152,21 +152,16 @@ def analyze_gold():
 
 
         if score >= 50:
-
             signal = "🟢 BUY"
             stop_loss = price - (atr_value * 2)
             take_profit = price + (atr_value * 2)
 
-
         elif score <= -50:
-
             signal = "🔴 SELL"
             stop_loss = price + (atr_value * 2)
             take_profit = price - (atr_value * 2)
 
-
         else:
-
             signal = "⚪ WAIT"
             stop_loss = 0
             take_profit = 0
@@ -184,8 +179,19 @@ def analyze_gold():
             confidence
         )
 
-
         entry_reasons = "\n".join(entry["reasons"])
+
+
+        smart = calculate_score(
+            signal,
+            confidence,
+            price,
+            sr["support"],
+            sr["resistance"],
+            news["risk"]
+        )
+
+        smart_reasons = "\n".join(smart["reasons"])
 
 
         save_trade(
@@ -235,6 +241,15 @@ Entry Quality:
 Entry Analysis:
 {entry_reasons}
 
+AI Score:
+{smart["score"]}/100
+
+Decision:
+{smart["decision"]}
+
+Smart Analysis:
+{smart_reasons}
+
 ATR:
 {atr_value:.2f}
 
@@ -256,7 +271,6 @@ M15
 
 
     except Exception as e:
-
         return f"❌ Error:\n{e}"
 
 
@@ -277,5 +291,4 @@ async def main():
 
 
 if __name__ == "__main__":
-
     asyncio.run(main())
