@@ -21,12 +21,14 @@ def analyze_gold():
             progress=False
         )
 
-        print("Rows:", len(data))
-
         if data.empty:
             return "❌ No gold data received"
 
         close = data["Close"]
+
+        # تبدیل به یک ستون ساده
+        if hasattr(close, "columns"):
+            close = close.iloc[:, 0]
 
         ema50 = ta.trend.ema_indicator(
             close,
@@ -78,15 +80,6 @@ Timeframe: M15
 
 
 async def main():
-
-    print("Starting QuantumGoldSignalBot")
-
-    print("TOKEN exists:", bool(TOKEN))
-    print("CHAT_ID exists:", bool(CHAT_ID))
-
-    if not TOKEN or not CHAT_ID:
-        print("Missing Telegram settings")
-        return
 
     bot = Bot(token=TOKEN)
 
