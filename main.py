@@ -6,8 +6,8 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 async def main():
-    print("Token exists:", bool(TOKEN))
-    print("Chat ID exists:", bool(CHAT_ID))
+    print("TOKEN:", bool(TOKEN))
+    print("CHAT_ID:", bool(CHAT_ID))
 
     if not TOKEN or not CHAT_ID:
         print("Missing Telegram settings")
@@ -17,7 +17,7 @@ async def main():
 
     await bot.send_message(
         chat_id=CHAT_ID,
-        text="✅ QuantumGoldSignalBot is online!\n\nاولین تست اتصال موفق شد."
+        text="✅ QuantumGoldSignalBot test message"
     )
 
     print("Message sent")
