@@ -11,6 +11,7 @@ from live_price import get_live_gold_price
 from support_resistance import find_support_resistance
 from entry_filter import check_entry
 from smart_score import calculate_score
+from no_trade_filter import apply_no_trade_filter
 
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -61,25 +62,13 @@ def analyze_gold():
         sr = find_support_resistance(close)
 
 
-        ema50 = ta.trend.ema_indicator(
-            close,
-            window=50
-        )
+        ema50 = ta.trend.ema_indicator(close, window=50)
 
-        ema200 = ta.trend.ema_indicator(
-            close,
-            window=200
-        )
+        ema200 = ta.trend.ema_indicator(close, window=200)
 
-
-        rsi = ta.momentum.rsi(
-            close,
-            window=14
-        )
-
+        rsi = ta.momentum.rsi(close, window=14)
 
         macd = ta.trend.MACD(close)
-
 
         atr = ta.volatility.average_true_range(
             high,
@@ -105,7 +94,6 @@ def analyze_gold():
 
         score = 0
         reasons = []
-
 
         if e50 > e200:
             score += 25
@@ -153,13 +141,13 @@ def analyze_gold():
 
         if score >= 50:
             signal = "🟢 BUY"
-            stop_loss = price - (atr_value * 2)
-            take_profit = price + (atr_value * 2)
+            stop_loss = price - atr_value * 2
+            take_profit = price + atr_value * 2
 
         elif score <= -50:
             signal = "🔴 SELL"
-            stop_loss = price + (atr_value * 2)
-            take_profit = price - (atr_value * 2)
+            stop_loss = price + atr_value * 2
+            take_profit = price - atr_value * 2
 
         else:
             signal = "⚪ WAIT"
@@ -194,8 +182,19 @@ def analyze_gold():
         smart_reasons = "\n".join(smart["reasons"])
 
 
-        save_trade(
+        final_trade = apply_no_trade_filter(
             signal,
+            smart["score"],
+            news["risk"],
+            entry["quality"]
+        )
+
+        final_signal = final_trade["signal"]
+        final_reason = final_trade["reason"]
+
+
+        save_trade(
+            final_signal,
             price,
             confidence,
             stop_loss,
@@ -212,7 +211,7 @@ def analyze_gold():
 XAU/USD
 
 Signal:
-{signal}
+{final_signal}
 
 Confidence:
 {confidence}%
@@ -246,6 +245,9 @@ AI Score:
 
 Decision:
 {smart["decision"]}
+
+Final Filter:
+{final_reason}
 
 Smart Analysis:
 {smart_reasons}
