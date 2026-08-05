@@ -1,4 +1,6 @@
 from market_fusion import get_market_fusion_score
+
+
 def calculate_score(
     signal,
     confidence,
@@ -16,49 +18,111 @@ def calculate_score(
     if signal == "🟢 BUY":
 
         if price > support:
+
             score += 10
-            reasons.append("✅ Above support")
+
+            reasons.append(
+                "✅ Above support"
+            )
+
         else:
+
             score -= 10
-            reasons.append("⚠️ Below support")
+
+            reasons.append(
+                "⚠️ Below support"
+            )
 
 
         if price < resistance:
+
             score += 5
-            reasons.append("✅ Room to resistance")
+
+            reasons.append(
+                "✅ Room to resistance"
+            )
+
         else:
+
             score -= 5
-            reasons.append("⚠️ Resistance nearby")
+
+            reasons.append(
+                "⚠️ Resistance nearby"
+            )
+
 
 
     elif signal == "🔴 SELL":
 
         if price < resistance:
+
             score += 10
-            reasons.append("✅ Below resistance")
+
+            reasons.append(
+                "✅ Below resistance"
+            )
+
         else:
+
             score -= 10
-            reasons.append("⚠️ Above resistance")
+
+            reasons.append(
+                "⚠️ Above resistance"
+            )
 
 
         if price > support:
+
             score += 5
-            reasons.append("✅ Room to support")
+
+            reasons.append(
+                "✅ Room to support"
+            )
+
         else:
+
             score -= 5
-            reasons.append("⚠️ Support nearby")
+
+            reasons.append(
+                "⚠️ Support nearby"
+            )
+
 
 
     if news_risk == "HIGH":
-        score -= 15
-        reasons.append("⚠️ News risk")
 
+        score -= 15
+
+        reasons.append(
+            "⚠️ News risk"
+        )
+
+
+
+    # اضافه کردن تحلیل اخبار، احساسات بازار و تحلیلگران
 
     fusion = get_market_fusion_score(score)
 
-score = fusion["score"]
 
-reasons.extend(fusion["reasons"])
+    score = fusion["score"]
+
+
+    reasons.extend(
+        fusion["reasons"]
+    )
+
+
+
+    if score > 100:
+
+        score = 100
+
+
+    if score < 0:
+
+        score = 0
+
+
 
     if score >= 80:
 
@@ -75,8 +139,13 @@ reasons.extend(fusion["reasons"])
         decision = "❌ Weak setup"
 
 
+
     return {
+
         "score": score,
+
         "decision": decision,
+
         "reasons": reasons
+
     }
