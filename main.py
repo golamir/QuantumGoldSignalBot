@@ -321,8 +321,14 @@ def analyze_gold():
 
 
         reasons_text = "\n".join(reasons)
+        
+fusion_details = smart.get("details", {})
 
-
+technical_score = fusion_details.get("technical", 0)
+news_score = fusion_details.get("news", 0)
+sentiment_score = fusion_details.get("sentiment", 0)
+analyst_score = fusion_details.get("analyst", 0)
+        
 
         save_trade(
             final_signal,
@@ -365,7 +371,17 @@ Resistance:
 
 Entry Quality:
 {entry["quality"]}
+Technical Score:
+{smart.get("details", {}).get("technical", 0)}
 
+News Score:
+{smart.get("details", {}).get("news", 0)}
+
+Sentiment Score:
+{smart.get("details", {}).get("sentiment", 0)}
+
+Analyst Score:
+{smart.get("details", {}).get("analyst", 0)}
 AI Score:
 {smart["score"]}/100
 
