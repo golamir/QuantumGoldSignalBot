@@ -1,4 +1,4 @@
-import os
+import os 
 import asyncio
 import yfinance as yf
 import ta
