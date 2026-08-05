@@ -420,8 +420,17 @@ async def main():
     bot = Bot(token=TOKEN)
 
 
-    message = analyze_gold()
+    messages = []
 
+for symbol, name in MARKETS:
+
+    result = analyze_market(symbol, name)
+
+    if result:
+        messages.append(result)
+
+
+message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
 
 
     if message is not None:
