@@ -1,3 +1,4 @@
+from market_fusion import get_market_fusion_score
 def calculate_score(
     signal,
     confidence,
@@ -53,12 +54,11 @@ def calculate_score(
         reasons.append("⚠️ News risk")
 
 
-    if score > 100:
-        score = 100
+    fusion = get_market_fusion_score(score)
 
-    if score < 0:
-        score = 0
+score = fusion["score"]
 
+reasons.extend(fusion["reasons"])
 
     if score >= 80:
 
