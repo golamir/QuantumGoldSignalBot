@@ -336,7 +336,7 @@ def analyze_market(symbol, name):
         )
 
         return f"""
-📊 GOLD {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
+📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
 
 ⚠️ Stop Loss (SL): {stop_loss:.1f}
 
@@ -348,7 +348,7 @@ def analyze_market(symbol, name):
 
 🥇 QuantumGold AI Signal
 
-XAU/USD
+{name}
 
 Signal:
 {final_signal}
