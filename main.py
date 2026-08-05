@@ -318,10 +318,9 @@ def analyze_gold():
             return None
 
 
-        reasons_text = "\n".join(reasons)
+                reasons_text = "\n".join(reasons)
 
-
-                save_trade(
+        save_trade(
             final_signal,
             price,
             smart["score"],
@@ -329,30 +328,19 @@ def analyze_gold():
             take_profit
         )
 
-
         return f"""
 📊 GOLD {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
 
 ⚠️ Stop Loss (SL): {stop_loss:.1f}
 
 🎯 TP1: {price + atr_value:.1f}
-🎯 TP2: {price + atr_value*2:.1f}
+🎯 TP2: {price + atr_value * 2:.1f}
 🎯 TP3: {take_profit:.1f}
 
-━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 
 🥇 QuantumGold AI Signal
 
-XAU/USD
-
-Signal:
-{final_signal}
-
-Confidence:
-{confidence}%
-
-Live Price:
-{price:.2f}
 XAU/USD
 
 Signal:
@@ -382,7 +370,6 @@ Resistance:
 Entry Quality:
 {entry["quality"]}
 
-
 AI Score:
 {smart["score"]}/100
 
@@ -411,7 +398,6 @@ Timeframe:
 M5
 """
 
-
     except Exception as e:
 
         print(f"Error: {e}")
@@ -434,18 +420,14 @@ async def main():
 
     if message is not None:
 
-
         await bot.send_message(
             chat_id=CHAT_ID,
             text=message
         )
 
-
         print("High quality signal sent")
 
-
     else:
-
 
         print(
             "No high quality BUY/SELL signal"
@@ -456,3 +438,6 @@ async def main():
 if __name__ == "__main__":
 
     asyncio.run(main())
+
+
+                
