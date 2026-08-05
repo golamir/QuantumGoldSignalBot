@@ -213,7 +213,7 @@ def analyze_market(symbol, name):
 
 
 
-        if dxy is not None:
+        if symbol == "GC=F" and dxy is not None:
 
             dxy_close = dxy["close"]
 
