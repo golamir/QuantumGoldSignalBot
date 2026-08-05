@@ -416,41 +416,33 @@ async def main():
 
     print("Starting QuantumGold AI")
 
-
     bot = Bot(token=TOKEN)
-
 
     messages = []
 
-for symbol, name in MARKETS:
+    for symbol, name in MARKETS:
 
-    result = analyze_market(symbol, name)
+        result = analyze_market(symbol, name)
 
-    if result:
-        messages.append(result)
+        if result:
+            messages.append(result)
 
+    if messages:
 
-message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
-
-
-    if message is not None:
+        message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
 
         await bot.send_message(
             chat_id=CHAT_ID,
             text=message
         )
 
-        print("High quality signal sent")
+        print("High quality signals sent")
 
     else:
 
-        print(
-            "No high quality BUY/SELL signal"
-        )
-
+        print("No high quality BUY/SELL signals")
 
 
 if __name__ == "__main__":
 
     asyncio.run(main())
-                
