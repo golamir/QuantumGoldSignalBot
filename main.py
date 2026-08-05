@@ -318,7 +318,7 @@ def analyze_gold():
             return None
 
 
-                reasons_text = "\n".join(reasons)
+                        reasons_text = "\n".join(reasons)
 
         save_trade(
             final_signal,
@@ -438,6 +438,4 @@ async def main():
 if __name__ == "__main__":
 
     asyncio.run(main())
-
-
                 
