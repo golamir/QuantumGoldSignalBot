@@ -141,11 +141,8 @@ def calculate_score(
 
 
     return {
-
-        "score": score,
-
-        "decision": decision,
-
-        "reasons": reasons
-
-    }
+    "score": score,
+    "decision": decision,
+    "reasons": reasons,
+    "details": fusion["details"]
+}
