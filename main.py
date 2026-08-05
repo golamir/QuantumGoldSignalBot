@@ -285,13 +285,14 @@ def analyze_market(symbol, name):
 
 
         smart = calculate_score(
-            signal,
+            name,
+            final_signal,
             confidence,
             price,
             sr["support"],
             sr["resistance"],
             news["risk"]
-        )
+)
 
 
         final_trade = apply_no_trade_filter(
