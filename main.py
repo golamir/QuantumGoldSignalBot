@@ -321,15 +321,16 @@ def analyze_gold():
         reasons_text = "\n".join(reasons)
 
 
-        save_trade(
-    final_signal,
-    price,
-    smart["score"],
-    stop_loss,
-    take_profit
-)
+                save_trade(
+            final_signal,
+            price,
+            smart["score"],
+            stop_loss,
+            take_profit
+        )
 
-return f"""
+
+        return f"""
 📊 GOLD {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
 
 ⚠️ Stop Loss (SL): {stop_loss:.1f}
@@ -341,6 +342,7 @@ return f"""
 ━━━━━━━━━━━━━━
 
 🥇 QuantumGold AI Signal
+
 XAU/USD
 
 Signal:
