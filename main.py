@@ -155,22 +155,37 @@ def analyze_market(symbol, name):
         atr_value = float(atr.iloc[-1])
 
 
-        avg_volume = float(volume.mean().iloc[0]) if hasattr(volume.mean(), "iloc") else float(volume.mean())
+                avg_volume_raw = volume.mean()
+
+        avg_volume = float(avg_volume_raw.iloc[0]) if hasattr(avg_volume_raw, "iloc") else float(avg_volume_raw)
 
         last_volume = volume.iloc[-1]
 
         current_volume = float(last_volume.iloc[0]) if hasattr(last_volume, "iloc") else float(last_volume)
+
+
         score = 0
 
         reasons = []
+
+
         if current_volume > avg_volume:
             score += 10
             reasons.append("✅ Volume confirms movement")
         else:
             score -= 5
             reasons.append("⚠️ Low volume")
-        if e50 > e200:
 
+
+        if adx_value >= 25:
+            score += 15
+            reasons.append("✅ Strong trend ADX")
+        else:
+            score -= 5
+            reasons.append("⚠️ Weak trend ADX")
+
+
+        if e50 > e200:
             score += 25
 
             reasons.append(
@@ -400,12 +415,27 @@ Final Filter:
 {final_reason}
 
 ATR:
+adx = ta.trend.ADXIndicator(
+    high,
+    low,
+    close,
+    window=14
+)
+
+adx_value = float(adx.adx().iloc[-1])
 {atr_value:.2f}
 
 RSI:
 {r:.2f}
 
 MACD:
+if adx_value >= 25:
+    score += 15
+    reasons.append("✅ Strong trend (ADX)")
+else:
+    score -= 10
+    reasons.append("⚠️ Weak trend")
+
 {m:.4f}
 
 News:
