@@ -322,16 +322,35 @@ def analyze_gold():
 
 
         save_trade(
-            final_signal,
-            price,
-            smart["score"],
-            stop_loss,
-            take_profit
-        )
+    final_signal,
+    price,
+    smart["score"],
+    stop_loss,
+    take_profit
+)
 
-        return f"""
+return f"""
+📊 GOLD {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
+
+⚠️ Stop Loss (SL): {stop_loss:.1f}
+
+🎯 TP1: {price + atr_value:.1f}
+🎯 TP2: {price + atr_value*2:.1f}
+🎯 TP3: {take_profit:.1f}
+
+━━━━━━━━━━━━━━
+
 🥇 QuantumGold AI Signal
+XAU/USD
 
+Signal:
+{final_signal}
+
+Confidence:
+{confidence}%
+
+Live Price:
+{price:.2f}
 XAU/USD
 
 Signal:
