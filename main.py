@@ -90,7 +90,7 @@ def analyze_market(symbol, name):
         close = gold["close"]
         high = gold["high"]
         low = gold["low"]
-
+        volume = gold["volume"]
 
 
         if symbol == "GC=F":
