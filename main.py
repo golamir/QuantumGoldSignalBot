@@ -155,11 +155,18 @@ def analyze_market(symbol, name):
         atr_value = float(atr.iloc[-1])
 
 
+        avg_volume = volume.mean()
 
+        current_volume = float(volume.iloc[-1])
         score = 0
 
         reasons = []
-
+        if current_volume > avg_volume:
+            score += 10
+            reasons.append("✅ Volume confirms movement")
+        else:
+            score -= 5
+            reasons.append("⚠️ Low volume")
         if e50 > e200:
 
             score += 25
