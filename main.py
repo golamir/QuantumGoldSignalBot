@@ -92,7 +92,10 @@ def analyze_market(symbol, name):
 
 
 
-        live_price = get_live_gold_price()
+        if symbol == "GC=F":
+    live_price = get_live_gold_price()
+else:
+    live_price = None
 
 
         price = (
