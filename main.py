@@ -18,6 +18,9 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
+MIN_AI_SCORE = 70
+
+
 def get_data(symbol):
 
     data = yf.download(
@@ -33,42 +36,92 @@ def get_data(symbol):
     return data
 
 
+def prepare_data(symbol):
+
+    data = get_data(symbol)
+
+    if data is None:
+        return None
+
+
+    close = data["Close"]
+    high = data["High"]
+    low = data["Low"]
+
+
+    if hasattr(close, "columns"):
+
+        close = close.iloc[:, 0]
+        high = high.iloc[:, 0]
+        low = low.iloc[:, 0]
+
+
+    return {
+        "close": close,
+        "high": high,
+        "low": low
+    }
+
 def analyze_gold():
 
     try:
 
         news = check_news()
 
-        gold = get_data("GC=F")
-        dxy_data = get_data("DX-Y.NYB")
+
+        gold = prepare_data("GC=F")
+
+        dxy = prepare_data("DX-Y.NYB")
+
+
+        if gold is None:
+
+            return None
+
+
+
+        close = gold["close"]
+        high = gold["high"]
+        low = gold["low"]
+
+
 
         live_price = get_live_gold_price()
 
-        if gold is None:
-            return "❌ Gold data unavailable"
 
+        price = (
+            live_price
+            if live_price
+            else float(close.iloc[-1])
+        )
 
-        close = gold["Close"]
-        high = gold["High"]
-        low = gold["Low"]
-
-
-        if hasattr(close, "columns"):
-            close = close.iloc[:, 0]
-            high = high.iloc[:, 0]
-            low = low.iloc[:, 0]
 
 
         sr = find_support_resistance(close)
 
 
-        ema50 = ta.trend.ema_indicator(close, window=50)
 
-        ema200 = ta.trend.ema_indicator(close, window=200)
+        ema50 = ta.trend.ema_indicator(
+            close,
+            window=50
+        )
 
-        rsi = ta.momentum.rsi(close, window=14)
+
+        ema200 = ta.trend.ema_indicator(
+            close,
+            window=200
+        )
+
+
+        rsi = ta.momentum.rsi(
+            close,
+            window=14
+        )
+
 
         macd = ta.trend.MACD(close)
+
+
 
         atr = ta.volatility.average_true_range(
             high,
@@ -78,81 +131,138 @@ def analyze_gold():
         )
 
 
-        price = live_price if live_price else float(close.iloc[-1])
-
 
         e50 = float(ema50.iloc[-1])
+
         e200 = float(ema200.iloc[-1])
 
         r = float(rsi.iloc[-1])
 
         m = float(macd.macd().iloc[-1])
+
         ms = float(macd.macd_signal().iloc[-1])
 
         atr_value = float(atr.iloc[-1])
 
 
+
         score = 0
+
         reasons = []
 
         if e50 > e200:
+
             score += 25
-            reasons.append("✅ EMA bullish")
+
+            reasons.append(
+                "✅ EMA bullish"
+            )
+
         else:
+
             score -= 25
-            reasons.append("❌ EMA bearish")
+
+            reasons.append(
+                "❌ EMA bearish"
+            )
+
 
 
         if r > 50:
+
             score += 15
-            reasons.append("✅ RSI positive")
+
+            reasons.append(
+                "✅ RSI positive"
+            )
+
         else:
+
             score -= 15
-            reasons.append("⚠️ RSI weak")
+
+            reasons.append(
+                "⚠️ RSI weak"
+            )
+
 
 
         if m > ms:
+
             score += 25
-            reasons.append("✅ MACD positive")
+
+            reasons.append(
+                "✅ MACD positive"
+            )
+
         else:
+
             score -= 25
-            reasons.append("❌ MACD negative")
+
+            reasons.append(
+                "❌ MACD negative"
+            )
 
 
-        if dxy_data is not None:
 
-            dxy = dxy_data["Close"]
+        if dxy is not None:
 
-            if hasattr(dxy, "columns"):
-                dxy = dxy.iloc[:, 0]
+            dxy_close = dxy["close"]
 
-            if float(dxy.iloc[-1]) < float(dxy.iloc[-20]):
+
+            if float(dxy_close.iloc[-1]) < float(dxy_close.iloc[-20]):
+
                 score += 15
-                reasons.append("✅ DXY supports gold")
+
+                reasons.append(
+                    "✅ DXY supports gold"
+                )
+
             else:
+
                 score -= 15
-                reasons.append("❌ DXY pressure")
+
+                reasons.append(
+                    "❌ DXY pressure"
+                )
+
 
 
         if news["risk"] == "HIGH":
+
             score -= 20
-            reasons.append("⚠️ News risk")
+
+            reasons.append(
+                "⚠️ News risk"
+            )
+
 
 
         if score >= 50:
+
             signal = "🟢 BUY"
+
             stop_loss = price - atr_value * 2
+
             take_profit = price + atr_value * 2
 
+
         elif score <= -50:
+
             signal = "🔴 SELL"
+
             stop_loss = price + atr_value * 2
+
             take_profit = price - atr_value * 2
 
+
         else:
+
             signal = "⚪ WAIT"
+
             stop_loss = 0
+
             take_profit = 0
+
 
 
         confidence = abs(score)
@@ -167,8 +277,6 @@ def analyze_gold():
             confidence
         )
 
-        entry_reasons = "\n".join(entry["reasons"])
-
 
         smart = calculate_score(
             signal,
@@ -179,8 +287,6 @@ def analyze_gold():
             news["risk"]
         )
 
-        smart_reasons = "\n".join(smart["reasons"])
-
 
         final_trade = apply_no_trade_filter(
             signal,
@@ -189,20 +295,43 @@ def analyze_gold():
             entry["quality"]
         )
 
+
         final_signal = final_trade["signal"]
+
+
         final_reason = final_trade["reason"]
+
+
+
+        # فقط BUY و SELL قوی اجازه ارسال دارند
+
+        if final_signal not in [
+            "🟢 BUY",
+            "🔴 SELL"
+        ]:
+
+            return None
+
+
+
+        if smart["score"] < MIN_AI_SCORE:
+
+            return None
+
+
+
+        reasons_text = "\n".join(reasons)
+
 
 
         save_trade(
             final_signal,
             price,
-            confidence,
+            smart["score"],
             stop_loss,
             take_profit
         )
 
-
-        reasons_text = "\n".join(reasons)
 
 
         return f"""
@@ -237,9 +366,6 @@ Resistance:
 Entry Quality:
 {entry["quality"]}
 
-Entry Analysis:
-{entry_reasons}
-
 AI Score:
 {smart["score"]}/100
 
@@ -248,9 +374,6 @@ Decision:
 
 Final Filter:
 {final_reason}
-
-Smart Analysis:
-{smart_reasons}
 
 ATR:
 {atr_value:.2f}
@@ -273,24 +396,46 @@ M5
 
 
     except Exception as e:
-        return f"❌ Error:\n{e}"
+
+        print(f"Error: {e}")
+
+        return None
+
 
 
 async def main():
 
     print("Starting QuantumGold AI")
 
+
     bot = Bot(token=TOKEN)
+
 
     message = analyze_gold()
 
-    await bot.send_message(
-        chat_id=CHAT_ID,
-        text=message
-    )
 
-    print("Signal sent successfully")
+
+    if message is not None:
+
+
+        await bot.send_message(
+            chat_id=CHAT_ID,
+            text=message
+        )
+
+
+        print("High quality signal sent")
+
+
+    else:
+
+
+        print(
+            "No high quality BUY/SELL signal"
+        )
+
 
 
 if __name__ == "__main__":
+
     asyncio.run(main())
