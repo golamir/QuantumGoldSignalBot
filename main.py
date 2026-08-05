@@ -1,5 +1,5 @@
 import os  
-import asyncio
+import asyncio 
 import yfinance as yf
 import ta
 
