@@ -209,7 +209,7 @@ def analyze_gold():
             dxy_close = dxy["close"]
 
 
-            if float(dxy_close.iloc[-1]) < float(dxy_close.iloc[-20]):
+            if len(dxy_close) > 20 and float(dxy_close.iloc[-1]) < float(dxy_close.iloc[-20]):
 
                 score += 15
 
