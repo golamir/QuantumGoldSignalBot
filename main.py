@@ -372,17 +372,6 @@ Sentiment Score:
 Analyst Score:
 {smart.get("details", {}).get("analyst", 0)}
 
-Technical Score:
-{technical_score}
-
-News Score:
-{news_score}
-
-Sentiment Score:
-{sentiment_score}
-
-Analyst Score:
-{analyst_score}
 
 AI Score:
 {smart["score"]}/100
