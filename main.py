@@ -20,7 +20,13 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 MIN_AI_SCORE = 70
 
-
+MARKETS = [
+    ("GC=F", "XAU/USD"),
+    ("BTC-USD", "BTC/USD"),
+    ("ETH-USD", "ETH/USD"),
+    ("SOL-USD", "SOL/USD"),
+    ("BNB-USD", "BNB/USD")
+]
 def get_data(symbol):
 
     data = yf.download(
