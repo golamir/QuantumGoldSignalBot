@@ -286,7 +286,7 @@ def analyze_market(symbol, name):
 
         smart = calculate_score(
             name,
-            final_signal,
+            signal,
             confidence,
             price,
             sr["support"],
