@@ -314,7 +314,7 @@ def analyze_gold():
 
 
 
-                if smart["score"] < MIN_AI_SCORE:
+         if smart["score"] < MIN_AI_SCORE:
 
             return None
 
@@ -383,6 +383,19 @@ Sentiment Score:
 
 Analyst Score:
 {smart.get("details", {}).get("analyst", 0)}
+
+Technical Score:
+{technical_score}
+
+News Score:
+{news_score}
+
+Sentiment Score:
+{sentiment_score}
+
+Analyst Score:
+{analyst_score}
+
 AI Score:
 {smart["score"]}/100
 
