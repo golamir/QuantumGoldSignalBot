@@ -360,17 +360,6 @@ Resistance:
 
 Entry Quality:
 {entry["quality"]}
-Technical Score:
-{smart.get("details", {}).get("technical", 0)}
-
-News Score:
-{smart.get("details", {}).get("news", 0)}
-
-Sentiment Score:
-{smart.get("details", {}).get("sentiment", 0)}
-
-Analyst Score:
-{smart.get("details", {}).get("analyst", 0)}
 
 
 AI Score:
