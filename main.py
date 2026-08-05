@@ -68,14 +68,14 @@ def prepare_data(symbol):
         "low": low
     }
 
-def analyze_gold():
+def analyze_market(symbol, name):
 
     try:
 
         news = check_news()
 
 
-        gold = prepare_data("GC=F")
+        gold = prepare_data(symbol)
 
         dxy = prepare_data("DX-Y.NYB")
 
