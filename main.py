@@ -155,9 +155,11 @@ def analyze_market(symbol, name):
         atr_value = float(atr.iloc[-1])
 
 
-        avg_volume = volume.mean()
+        avg_volume = float(volume.mean().iloc[0]) if hasattr(volume.mean(), "iloc") else float(volume.mean())
 
-        current_volume = float(volume.iloc[-1])
+        last_volume = volume.iloc[-1]
+
+        current_volume = float(last_volume.iloc[0]) if hasattr(last_volume, "iloc") else float(last_volume)
         score = 0
 
         reasons = []
