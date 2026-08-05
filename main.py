@@ -133,12 +133,21 @@ def analyze_market(symbol, name):
 
 
 
-        atr = ta.volatility.average_true_range(
-            high,
-            low,
-            close,
-            14
-        )
+atr = ta.volatility.average_true_range(
+    high,
+    low,
+    close,
+    14
+)
+
+adx_indicator = ta.trend.ADXIndicator(
+    high,
+    low,
+    close,
+    window=14
+)
+
+adx_value = float(adx_indicator.adx().iloc[-1])
 
 
 
