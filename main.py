@@ -63,10 +63,11 @@ def prepare_data(symbol):
 
 
     return {
-        "close": close,
-        "high": high,
-        "low": low
-    }
+    "close": close,
+    "high": high,
+    "low": low,
+    "volume": data["Volume"]
+}
 
 def analyze_market(symbol, name):
 
