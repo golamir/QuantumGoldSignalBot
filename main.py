@@ -424,28 +424,16 @@ Final Filter:
 {final_reason}
 
 ATR:
-adx = ta.trend.ADXIndicator(
-    high,
-    low,
-    close,
-    window=14
-)
-
-adx_value = float(adx.adx().iloc[-1])
 {atr_value:.2f}
 
 RSI:
 {r:.2f}
 
 MACD:
-if adx_value >= 25:
-    score += 15
-    reasons.append("✅ Strong trend (ADX)")
-else:
-    score -= 10
-    reasons.append("⚠️ Weak trend")
-
 {m:.4f}
+
+ADX:
+{adx_value:.2f}
 
 News:
 {news["message"]}
