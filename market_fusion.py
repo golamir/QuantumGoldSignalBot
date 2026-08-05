@@ -3,7 +3,7 @@ from sentiment_engine import get_sentiment_score
 from analyst_engine import get_analyst_score
 
 
-def get_market_fusion_score(technical_score):
+def get_market_fusion_score(symbol, technical_score):
 
     news = get_news_score()
 
