@@ -2,6 +2,7 @@ from market_fusion import get_market_fusion_score
 
 
 def calculate_score(
+    symbol,
     signal,
     confidence,
     price,
@@ -101,7 +102,7 @@ def calculate_score(
 
     # اضافه کردن تحلیل اخبار، احساسات بازار و تحلیلگران
 
-    fusion = get_market_fusion_score(score)
+    fusion = get_market_fusion_score(symbol, score)
 
 
     score = fusion["score"]
