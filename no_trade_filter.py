@@ -5,30 +5,39 @@ def apply_no_trade_filter(
     entry_quality
 ):
 
-    if signal == "🟢 BUY" or signal == "🔴 SELL":
+    if signal not in ["🟢 BUY", "🔴 SELL"]:
 
-        if ai_score < 60:
-            return {
-                "signal": "⚪ WAIT",
-                "reason": "AI Score too low"
-            }
-
-
-        if news_risk == "HIGH" and ai_score < 75:
-            return {
-                "signal": "⚪ WAIT",
-                "reason": "High news risk"
-            }
+        return {
+            "signal": "⚪ WAIT",
+            "reason": "No clear signal"
+        }
 
 
-        if entry_quality == "C":
-            return {
-                "signal": "⚪ WAIT",
-                "reason": "Entry quality weak"
-            }
+    if ai_score < 70:
+
+        return {
+            "signal": "⚪ WAIT",
+            "reason": "AI Score too low"
+        }
+
+
+    if news_risk == "HIGH" and ai_score < 80:
+
+        return {
+            "signal": "⚪ WAIT",
+            "reason": "High news risk"
+        }
+
+
+    if entry_quality == "C":
+
+        return {
+            "signal": "⚪ WAIT",
+            "reason": "Entry quality weak"
+        }
 
 
     return {
         "signal": signal,
-        "reason": "Conditions acceptable"
+        "reason": "High quality setup"
     }
