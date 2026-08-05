@@ -314,21 +314,22 @@ def analyze_gold():
 
 
 
-        if smart["score"] < MIN_AI_SCORE:
+                if smart["score"] < MIN_AI_SCORE:
 
             return None
 
 
+        fusion_details = smart.get("details", {})
+
+        technical_score = fusion_details.get("technical", 0)
+        news_score = fusion_details.get("news", 0)
+        sentiment_score = fusion_details.get("sentiment", 0)
+        analyst_score = fusion_details.get("analyst", 0)
+
 
         reasons_text = "\n".join(reasons)
-        
-fusion_details = smart.get("details", {})
 
-technical_score = fusion_details.get("technical", 0)
-news_score = fusion_details.get("news", 0)
-sentiment_score = fusion_details.get("sentiment", 0)
-analyst_score = fusion_details.get("analyst", 0)
-        
+
 
         save_trade(
             final_signal,
