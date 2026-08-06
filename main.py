@@ -47,9 +47,9 @@ def get_data(symbol, interval="5m"):
     return data
 
 
-def prepare_data(symbol):
+def prepare_data(symbol, interval="5m"):
 
-    data = get_data(symbol)
+    data = get_data(symbol, interval)
 
     if data is None:
         return None
@@ -83,8 +83,11 @@ def analyze_market(symbol, name):
 
         gold = prepare_data(symbol)
 
-        dxy = prepare_data("DX-Y.NYB")
+        market_m15 = prepare_data(symbol, "15m")
 
+        market_h1 = prepare_data(symbol, "1h")
+
+        dxy = prepare_data("DX-Y.NYB")
 
         if gold is None:
 
