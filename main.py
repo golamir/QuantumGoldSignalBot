@@ -526,23 +526,20 @@ async def main():
         if result:
             messages.append(result)
 
-    if messages:
+        if messages:
 
-        message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
+            message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
 
-        await bot.send_message(
-            chat_id=CHAT_ID,
-            text=message
-)
-
-print("Report time:", datetime.datetime.now())
+            await bot.send_message(
+                chat_id=CHAT_ID,
+                text=message
+            )
 
         print("High quality signals sent")
 
     else:
 
         print("No high quality BUY/SELL signals")
-
 
 if __name__ == "__main__":
 
