@@ -6,7 +6,12 @@ import ta
 from telegram import Bot
 
 from news_filter import check_news
-from trade_memory import save_trade, get_trade_count
+from trade_memory import (
+    save_trade,
+    get_trade_count,
+    get_last_signal,
+    save_last_signal
+)
 from live_price import get_live_gold_price
 from support_resistance import find_support_resistance
 from entry_filter import check_entry
@@ -364,13 +369,20 @@ def analyze_market(symbol, name):
 
         reasons_text = "\n".join(reasons)
 
-        save_trade(
-            final_signal,
-            price,
-            smart["score"],
-            stop_loss,
-            take_profit
-        )
+        last_signal = get_last_signal(name)
+
+if last_signal == final_signal:
+    return None
+
+save_last_signal(name, final_signal)
+
+save_trade(
+    final_signal,
+    price,
+    smart["score"],
+    stop_loss,
+    take_profit
+)
 
         return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
