@@ -427,9 +427,9 @@ def analyze_market(symbol, name):
             smart["score"],
             stop_loss,
             take_profit
-)
+        )
  
-save_signal(final_signal)
+        save_signal(final_signal)
         return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
 
