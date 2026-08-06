@@ -1,5 +1,6 @@
 import os  
 import asyncio 
+import datetime
 import yfinance as yf
 import ta
 
