@@ -164,7 +164,30 @@ def analyze_market(symbol, name):
         e200 = float(ema200.iloc[-1])
 
         r = float(rsi.iloc[-1])
+        if market_m15 is not None:
 
+            ema50_m15 = ta.trend.ema_indicator(
+                market_m15["close"],
+                window=50
+            )
+
+            ema200_m15 = ta.trend.ema_indicator(
+                market_m15["close"],
+                window=200
+            )
+
+
+        if market_h1 is not None:
+
+            ema50_h1 = ta.trend.ema_indicator(
+                market_h1["close"],
+                window=50
+            )
+
+            ema200_h1 = ta.trend.ema_indicator(
+                market_h1["close"],
+                window=200
+            )
         m = float(macd.macd().iloc[-1])
 
         ms = float(macd.macd_signal().iloc[-1])
