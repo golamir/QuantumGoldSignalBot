@@ -197,7 +197,28 @@ def analyze_market(symbol, name):
         ms = float(macd.macd_signal().iloc[-1])
 
         atr_value = float(atr.iloc[-1])
+        if symbol == "GC=F":
 
+            sl_multiplier = 2
+            tp_multiplier = 3
+
+
+        elif symbol == "BTC-USD":
+
+            sl_multiplier = 3
+            tp_multiplier = 5
+
+
+        elif symbol == "ETH-USD":
+
+            sl_multiplier = 3
+            tp_multiplier = 5
+
+
+        else:
+
+            sl_multiplier = 2
+            tp_multiplier = 3
 
         avg_volume_raw = volume.mean()
 
@@ -350,18 +371,17 @@ def analyze_market(symbol, name):
 
             signal = "🟢 BUY"
 
-            stop_loss = price - atr_value * 2
+            stop_loss = price - atr_value * sl_multiplier
 
-            take_profit = price + atr_value * 2
-
+            take_profit = price + atr_value * tp_multiplier
 
         elif score <= -50:
 
             signal = "🔴 SELL"
 
-            stop_loss = price + atr_value * 2
+            stop_loss = price + atr_value * sl_multiplier
 
-            take_profit = price - atr_value * 2
+            take_profit = price - atr_value * tp_multiplier
 
 
         else:
