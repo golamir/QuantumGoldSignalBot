@@ -9,6 +9,7 @@ from telegram import Bot
 
 from news_filter import check_news
 from daily_report import save_signal, get_report
+from signal_memory import allow_new_signal, save_last_signal
 from trade_memory import (
     save_trade,
     get_trade_count,
