@@ -369,7 +369,7 @@ def analyze_market(symbol, name):
 
         reasons_text = "\n".join(reasons)
 
-        last_signal = get_last_signal(name)
+last_signal = get_last_signal(name)
 
 if last_signal == final_signal:
     return None
