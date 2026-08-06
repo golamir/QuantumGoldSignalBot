@@ -383,7 +383,20 @@ def analyze_market(symbol, name):
             r,
             confidence
         )
+        if entry["quality"] == "A":
 
+            score += 10
+            reasons.append("✅ High quality entry")
+
+        elif entry["quality"] == "B":
+
+            score += 5
+            reasons.append("✅ Good quality entry")
+
+        else:
+
+            score -= 10
+            reasons.append("⚠️ Weak entry quality")
 
         smart = calculate_score(
             name,
