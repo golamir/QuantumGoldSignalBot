@@ -369,12 +369,6 @@ def analyze_market(symbol, name):
 
         reasons_text = "\n".join(reasons)
 
-last_signal = get_last_signal(name)
-
-if last_signal == final_signal:
-    return None
-
-save_last_signal(name, final_signal)
 
 save_trade(
     final_signal,
