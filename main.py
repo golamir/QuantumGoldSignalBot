@@ -525,6 +525,8 @@ async def main():
 
         if result:
             messages.append(result)
+
+
     if messages:
 
         message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
@@ -533,6 +535,7 @@ async def main():
             chat_id=CHAT_ID,
             text=message
         )
+
 
         report = get_report()
 
@@ -556,12 +559,12 @@ Total Signals:
 
         print("High quality signals sent")
 
+
     else:
 
         print("No high quality BUY/SELL signals")
-    else:
 
-        print("No high quality BUY/SELL signals")
+
 
 if __name__ == "__main__":
 
