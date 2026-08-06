@@ -7,6 +7,7 @@ import ta
 from telegram import Bot
 
 from news_filter import check_news
+from daily_report import save_signal, get_report
 from trade_memory import (
     save_trade,
     get_trade_count,
@@ -427,7 +428,8 @@ def analyze_market(symbol, name):
             stop_loss,
             take_profit
 )
-
+ 
+save_signal(final_signal)
         return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.1f}
 
