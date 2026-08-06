@@ -10,15 +10,16 @@ def check_news():
     hour = datetime.utcnow().hour
 
     # ساعات پرریسک تقریبی بازار آمریکا
-    high_risk_hours = [12, 13, 14, 15]
+    high_risk_hours = [12, 13, 14, 15, 16]
 
     if hour in high_risk_hours:
         return {
-            "risk": "HIGH",
-            "message": "⚠️ Possible US news volatility"
-        }
+    "risk": "HIGH",
+    "message": "⚠️ High volatility risk - avoid aggressive entries"
+}
 
     return {
-        "risk": "LOW",
-        "message": "✅ No high risk period"
-    }
+        return {
+    "risk": "LOW",
+    "message": "✅ Safe trading period"
+}
