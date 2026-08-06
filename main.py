@@ -525,18 +525,40 @@ async def main():
 
         if result:
             messages.append(result)
+    if messages:
 
-        if messages:
+        message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
 
-            message = "\n\n━━━━━━━━━━━━━━━━━━━━\n\n".join(messages)
+        await bot.send_message(
+            chat_id=CHAT_ID,
+            text=message
+        )
 
-            await bot.send_message(
-                chat_id=CHAT_ID,
-                text=message
-            )
+        report = get_report()
+
+        report_message = f"""
+📊 QuantumGold AI Daily Report
+
+Total Signals:
+{report["total"]}
+
+🟢 BUY:
+{report["buy"]}
+
+🔴 SELL:
+{report["sell"]}
+"""
+
+        await bot.send_message(
+            chat_id=CHAT_ID,
+            text=report_message
+        )
 
         print("High quality signals sent")
 
+    else:
+
+        print("No high quality BUY/SELL signals")
     else:
 
         print("No high quality BUY/SELL signals")
