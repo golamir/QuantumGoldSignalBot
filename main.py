@@ -441,6 +441,17 @@ def analyze_market(symbol, name):
             return None
 
 
+        if not allow_new_signal(final_signal, price):
+
+            return None
+
+
+        save_last_signal(final_signal, price)
+
+
+        reasons_text = "\n".join(reasons)
+
+
         reasons_text = "\n".join(reasons)
 
 
