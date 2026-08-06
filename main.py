@@ -209,7 +209,15 @@ def analyze_market(symbol, name):
         score = 0
 
         reasons = []
+        if news["risk"] == "HIGH":
 
+            score -= 20
+            reasons.append("⚠️ High news risk")
+
+        else:
+
+            score += 5
+            reasons.append("✅ News environment safe")
 
         if current_volume > avg_volume:
             score += 10
