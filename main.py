@@ -370,12 +370,12 @@ def analyze_market(symbol, name):
         reasons_text = "\n".join(reasons)
 
 
-save_trade(
-    final_signal,
-    price,
-    smart["score"],
-    stop_loss,
-    take_profit
+        save_trade(
+            final_signal,
+            price,
+            smart["score"],
+            stop_loss,
+            take_profit
 )
 
         return f"""
@@ -451,7 +451,7 @@ Timeframe:
 M5
 """
 
-    except Exception as e:
+    except Exception as e: 
 
         print(f"Error: {e}")
 
