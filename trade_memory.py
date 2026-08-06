@@ -41,3 +41,10 @@ def get_trade_count():
 
     with open(FILE, "r", encoding="utf-8") as f:
         return sum(1 for row in f) - 1
+_last_signals = {}
+
+def get_last_signal(symbol):
+    return _last_signals.get(symbol)
+
+def save_last_signal(symbol, signal):
+    _last_signals[symbol] = signal
