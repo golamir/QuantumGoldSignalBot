@@ -224,7 +224,30 @@ def analyze_market(symbol, name):
             score -= 5
             reasons.append("⚠️ Weak trend ADX")
 
+        if market_m15 is not None:
 
+            e50_m15 = float(ema50_m15.iloc[-1])
+            e200_m15 = float(ema200_m15.iloc[-1])
+
+            if e50_m15 > e200_m15:
+                score += 10
+                reasons.append("✅ M15 trend bullish")
+            else:
+                score -= 10
+                reasons.append("❌ M15 trend bearish")
+
+
+        if market_h1 is not None:
+
+            e50_h1 = float(ema50_h1.iloc[-1])
+            e200_h1 = float(ema200_h1.iloc[-1])
+
+            if e50_h1 > e200_h1:
+                score += 10
+                reasons.append("✅ H1 trend bullish")
+            else:
+                score -= 10
+                reasons.append("❌ H1 trend bearish")
         if e50 > e200:
             score += 25
 
