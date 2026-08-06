@@ -32,12 +32,12 @@ MARKETS = [
     ("SOL-USD", "SOL/USD"),
     ("BNB-USD", "BNB/USD")
 ]
-def get_data(symbol):
+def get_data(symbol, interval="5m"):
 
     data = yf.download(
         symbol,
         period="7d",
-        interval="5m",
+        interval=interval,
         progress=False
     )
 
