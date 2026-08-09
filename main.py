@@ -82,6 +82,11 @@ def analyze_market(symbol, name):
 
     try:
 
+        # 🥇 Gold market is closed on Saturday and Sunday
+        if symbol == "GC=F" and datetime.datetime.now().weekday() in [5, 6]:
+            print(f"{name}: Market closed - weekend")
+            return None
+
         news = check_news()
 
 
