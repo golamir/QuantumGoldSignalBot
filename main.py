@@ -490,11 +490,10 @@ def analyze_market(symbol, name):
             take_profit
         )
  
-        save_signal(final_signal)
-        save_signal(final_signal)
+                save_signal(final_signal)
 
-return f"""
-📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.5f}
+        return f"""
+📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW {price:.5f}
 
 ⚠️ Stop Loss (SL): {stop_loss:.5f}
 
@@ -540,6 +539,31 @@ AI Score:
 
 Decision:
 {smart["decision"]}
+
+Final Filter:
+{final_reason}
+
+ATR:
+{atr_value:.5f}
+
+RSI:
+{r:.2f}
+
+MACD:
+{m:.5f}
+
+ADX:
+{adx_value:.2f}
+
+News:
+{news["message"]}
+
+Reasons:
+{reasons_text}
+
+Timeframe:
+M5
+"""
 
 Final Filter:
 {final_reason}
