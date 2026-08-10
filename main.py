@@ -492,7 +492,7 @@ def analyze_market(symbol, name):
  
         save_signal(final_signal)
 
-        return f"""
+                return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW {price:.5f}
 
 ⚠️ Stop Loss (SL): {stop_loss:.5f}
@@ -551,31 +551,6 @@ RSI:
 
 MACD:
 {m:.5f}
-
-ADX:
-{adx_value:.2f}
-
-News:
-{news["message"]}
-
-Reasons:
-{reasons_text}
-
-Timeframe:
-M5
-"""
-
-Final Filter:
-{final_reason}
-
-ATR:
-{atr_value:.2f}
-
-RSI:
-{r:.2f}
-
-MACD:
-{m:.4f}
 
 ADX:
 {adx_value:.2f}
