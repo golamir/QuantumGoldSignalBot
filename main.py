@@ -491,14 +491,16 @@ def analyze_market(symbol, name):
         )
  
         save_signal(final_signal)
-        return f"""
+        save_signal(final_signal)
+
+return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW  {price:.5f}
 
-⚠️ Stop Loss (SL): {stop_loss:.1f}
+⚠️ Stop Loss (SL): {stop_loss:.5f}
 
-🎯 TP1: {price + atr_value:.1f}
-🎯 TP2: {price + atr_value * 2:.1f}
-🎯 TP3: {take_profit:.1f}
+🎯 TP1: {price + atr_value:.5f}
+🎯 TP2: {price + atr_value * 2:.5f}
+🎯 TP3: {take_profit:.5f}
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -513,22 +515,22 @@ Confidence:
 {confidence}%
 
 Live Price:
-{price:.2f}
+{price:.5f}
 
 Stop Loss:
-{stop_loss:.2f}
+{stop_loss:.5f}
 
 Take Profit:
-{take_profit:.2f}
+{take_profit:.5f}
 
 Stored Signals:
 {get_trade_count()}
 
 Support:
-{sr["support"]:.2f}
+{sr["support"]:.5f}
 
 Resistance:
-{sr["resistance"]:.2f}
+{sr["resistance"]:.5f}
 
 Entry Quality:
 {entry["quality"]}
