@@ -30,11 +30,13 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 MIN_AI_SCORE = 70
 
 MARKETS = [
-    ("GC=F", "XAU/USD"),
-    ("BTC-USD", "BTC/USD"),
-    ("ETH-USD", "ETH/USD"),
-    ("SOL-USD", "SOL/USD"),
-    ("BNB-USD", "BNB/USD")
+    ("EURUSD=X", "EUR/USD"),
+    ("GBPUSD=X", "GBP/USD"),
+    ("USDJPY=X", "USD/JPY"),
+    ("USDCHF=X", "USD/CHF"),
+    ("AUDUSD=X", "AUD/USD"),
+    ("USDCAD=X", "USD/CAD"),
+    ("NZDUSD=X", "NZD/USD")
 ]
 def get_data(symbol, interval="5m"):
 
