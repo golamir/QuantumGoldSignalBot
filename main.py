@@ -492,7 +492,7 @@ def analyze_market(symbol, name):
  
         save_signal(final_signal)
 
-                return f"""
+        return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW {price:.5f}
 
 ⚠️ Stop Loss (SL): {stop_loss:.5f}
