@@ -490,7 +490,7 @@ def analyze_market(symbol, name):
             take_profit
         )
  
-                save_signal(final_signal)
+        save_signal(final_signal)
 
         return f"""
 📊 {name} {final_signal.replace("🟢 ", "").replace("🔴 ", "")} NOW {price:.5f}
