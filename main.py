@@ -1347,65 +1347,197 @@ def analyze_market(
         # -------------------------------------------------
 
         # =================================================
-# MASTER QUALITY FILTER
-# =================================================
+        # MASTER QUALITY FILTER
+        # =================================================
 
-is_buy = signal == "🟢 BUY"
+        is_buy = signal == "🟢 BUY"
 
-if is_buy:
+        if is_buy:
 
-    trend_aligned = (
-        ema_bullish
-        and macd_bullish
-        and m15_bullish
-        and h1_bullish
-    )
+            trend_aligned = (
+                ema_bullish
+                and macd_bullish
+                and m15_bullish
+                and h1_bullish
+            )
 
-    rsi_valid = (
-        45 < r < 70
-    )
+            rsi_valid = (
+                45 < r < 70
+            )
 
-else:
+        else:
 
-    trend_aligned = (
-        not ema_bullish
-        and not macd_bullish
-        and not m15_bullish
-        and not h1_bullish
-    )
+            trend_aligned = (
+                not ema_bullish
+                and not macd_bullish
+                and not m15_bullish
+                and not h1_bullish
+            )
 
-    rsi_valid = (
-        30 < r < 55
-    )
+            rsi_valid = (
+                30 < r < 55
+            )
 
+        # =================================================
+        # APPLY MASTER FILTER
+        # =================================================
 
-final_trade = apply_no_trade_filter(
+        final_trade = apply_no_trade_filter(
+            signal=signal,
+            ai_score=final_ai_score,
+            news_risk=news["risk"],
+            entry_quality=entry_quality,
+            quality_score=quality_score,
+            adx_value=adx_value,
+            volume_confirmed=volume_confirmed,
+            trend_aligned=trend_aligned,
+            rsi_valid=rsi_valid,
+            tp_sl_valid=valid_levels
+        )
 
-    signal=signal,
+        final_signal = final_trade["signal"]
+        final_reason = final_trade["reason"]
 
-    ai_score=final_ai_score,
+        # =================================================
+        # FINAL SIGNAL CHECK
+        # =================================================
 
-    news_risk=news["risk"],
+        if final_signal not in [
+            "🟢 BUY",
+            "🔴 SELL"
+        ]:
 
-    entry_quality=entry_quality,
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"{final_reason} | "
+                f"AI={final_ai_score} "
+                f"Quality={quality_score}"
+            )
 
-    quality_score=quality_score,
+            return None
 
-    adx_value=adx_value,
+        # =================================================
+        # FINAL AI SCORE CHECK
+        # =================================================
 
-    volume_confirmed=volume_confirmed,
+        if final_ai_score < MIN_AI_SCORE:
 
-    trend_aligned=trend_aligned,
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"AI Score below {MIN_AI_SCORE} | "
+                f"AI={final_ai_score} "
+                f"Quality={quality_score}"
+            )
 
-    rsi_valid=rsi_valid,
+            return None
 
-    tp_sl_valid=valid_levels
-)
+        # =================================================
+        # FINAL QUALITY SCORE CHECK
+        # =================================================
 
+        if quality_score < MIN_QUALITY_SCORE:
 
-final_signal = final_trade["signal"]
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"Quality below {MIN_QUALITY_SCORE} | "
+                f"AI={final_ai_score} "
+                f"Quality={quality_score}"
+            )
 
-final_reason = final_trade["reason"]
+            return None
+
+        # =================================================
+        # ENTRY QUALITY CHECK
+        # =================================================
+
+        if entry_quality != "A":
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"Entry Quality {entry_quality}"
+            )
+
+            return None
+
+        # =================================================
+        # ADX CHECK
+        # =================================================
+
+        if adx_value < MIN_ADX:
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"ADX below {MIN_ADX} | "
+                f"AI={final_ai_score} "
+                f"Quality={quality_score}"
+            )
+
+            return None
+
+        # =================================================
+        # VOLUME CHECK
+        # =================================================
+
+        if not volume_confirmed:
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"Volume confirmation missing"
+            )
+
+            return None
+
+        # =================================================
+        # TREND ALIGNMENT CHECK
+        # =================================================
+
+        if not trend_aligned:
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"M5/M15/H1 trend conflict"
+            )
+
+            return None
+
+        # =================================================
+        # RSI CHECK
+        # =================================================
+
+        if not rsi_valid:
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"RSI not valid"
+            )
+
+            return None
+
+        # =================================================
+        # NEWS CHECK
+        # =================================================
+
+        if news["risk"] == "HIGH":
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"HIGH news risk"
+            )
+
+            return None
+
+        # =================================================
+        # TP / SL FINAL CHECK
+        # =================================================
+
+        if not valid_levels:
+
+            print(
+                f"{name}: MASTER REJECTED - "
+                f"Invalid TP/SL"
+            )
+
+            return None
             "Rejected"
         )
 
