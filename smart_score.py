@@ -1,6 +1,9 @@
 from market_fusion import get_market_fusion_score
 
 
+MIN_AI_SCORE = 80
+
+
 def calculate_score(
     symbol,
     signal,
@@ -11,139 +14,176 @@ def calculate_score(
     news_risk
 ):
 
-    score = confidence
-
+    score = float(confidence)
     reasons = []
 
+    # =====================================================
+    # DIRECTION
+    # =====================================================
 
     if signal == "🟢 BUY":
 
         if price > support:
-
             score += 10
-
-            reasons.append(
-                "✅ Above support"
-            )
-
+            reasons.append("✅ Price above support")
         else:
-
             score -= 10
-
-            reasons.append(
-                "⚠️ Below support"
-            )
-
+            reasons.append("⚠️ Price below support")
 
         if price < resistance:
-
             score += 5
-
-            reasons.append(
-                "✅ Room to resistance"
-            )
-
+            reasons.append("✅ Room to resistance")
         else:
-
             score -= 5
-
-            reasons.append(
-                "⚠️ Resistance nearby"
-            )
-
-
+            reasons.append("⚠️ Resistance nearby")
 
     elif signal == "🔴 SELL":
 
         if price < resistance:
-
             score += 10
-
-            reasons.append(
-                "✅ Below resistance"
-            )
-
+            reasons.append("✅ Price below resistance")
         else:
-
             score -= 10
-
-            reasons.append(
-                "⚠️ Above resistance"
-            )
-
+            reasons.append("⚠️ Price above resistance")
 
         if price > support:
-
             score += 5
-
-            reasons.append(
-                "✅ Room to support"
-            )
-
+            reasons.append("✅ Room to support")
         else:
-
             score -= 5
+            reasons.append("⚠️ Support nearby")
 
-            reasons.append(
-                "⚠️ Support nearby"
-            )
+    else:
 
+        return {
+            "score": 0,
+            "decision": "❌ Weak setup",
+            "reasons": ["No valid BUY/SELL"],
+            "details": {}
+        }
 
+    # =====================================================
+    # NEWS RISK
+    # =====================================================
 
     if news_risk == "HIGH":
 
         score -= 15
+        reasons.append("❌ HIGH news risk")
 
-        reasons.append(
-            "⚠️ News risk"
+    elif news_risk == "MEDIUM":
+
+        score -= 5
+        reasons.append("⚠️ Medium news risk")
+
+    else:
+
+        score += 5
+        reasons.append("✅ Low news risk")
+
+    # =====================================================
+    # CLAMP BEFORE FUSION
+    # =====================================================
+
+    score = max(0, min(100, score))
+
+    # =====================================================
+    # MARKET FUSION
+    # =====================================================
+
+    try:
+
+        fusion = get_market_fusion_score(
+            symbol,
+            score
         )
 
+    except Exception as e:
 
+        print(
+            f"{symbol}: Market fusion error: {e}"
+        )
 
-    # اضافه کردن تحلیل اخبار، احساسات بازار و تحلیلگران
+        fusion = {
+            "score": score,
+            "reasons": [],
+            "details": {}
+        }
 
-    fusion = get_market_fusion_score(symbol, score)
+    # =====================================================
+    # FUSION SCORE
+    # =====================================================
 
-
-    score = fusion["score"]
-
-
-    reasons.extend(
-        fusion["reasons"]
+    fusion_score = fusion.get(
+        "score",
+        score
     )
 
+    try:
 
+        fusion_score = float(fusion_score)
 
-    if score > 100:
+    except Exception:
 
-        score = 100
+        fusion_score = score
 
+    # =====================================================
+    # FINAL SCORE
+    # =====================================================
 
-    if score < 0:
+    score = max(
+        0,
+        min(
+            100,
+            int(round(fusion_score))
+        )
+    )
 
-        score = 0
+    fusion_reasons = fusion.get(
+        "reasons",
+        []
+    )
 
+    if isinstance(fusion_reasons, list):
 
+        reasons.extend(
+            fusion_reasons
+        )
 
-    if score >= 80:
+    # =====================================================
+    # DECISION
+    # =====================================================
+
+    if score >= 90:
+
+        decision = "🔥 Very strong setup"
+
+    elif score >= 80:
 
         decision = "✅ Strong setup"
-
 
     elif score >= 70:
 
         decision = "⚠️ Medium setup"
 
-
     else:
 
         decision = "❌ Weak setup"
 
-
+    # =====================================================
+    # RESULT
+    # =====================================================
 
     return {
-    "score": score,
-    "decision": decision,
-    "reasons": reasons,
-    "details": fusion["details"]
-}
+
+        "score": score,
+
+        "decision": decision,
+
+        "reasons": reasons,
+
+        "details": fusion.get(
+            "details",
+            {}
+        )
+    }
