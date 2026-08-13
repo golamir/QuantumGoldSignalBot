@@ -1,4 +1,4 @@
-import os
+import os 
 import asyncio
 import datetime
 import math
@@ -1346,20 +1346,66 @@ def analyze_market(
         # OLD NO TRADE FILTER
         # -------------------------------------------------
 
-        final_trade = apply_no_trade_filter(
-            signal,
-            final_ai_score,
-            news_risk,
-            entry_quality
-        )
+        # =================================================
+# MASTER QUALITY FILTER
+# =================================================
 
-        final_signal = final_trade.get(
-            "signal",
-            "⚪ WAIT"
-        )
+is_buy = signal == "🟢 BUY"
 
-        final_reason = final_trade.get(
-            "reason",
+if is_buy:
+
+    trend_aligned = (
+        ema_bullish
+        and macd_bullish
+        and m15_bullish
+        and h1_bullish
+    )
+
+    rsi_valid = (
+        45 < r < 70
+    )
+
+else:
+
+    trend_aligned = (
+        not ema_bullish
+        and not macd_bullish
+        and not m15_bullish
+        and not h1_bullish
+    )
+
+    rsi_valid = (
+        30 < r < 55
+    )
+
+
+final_trade = apply_no_trade_filter(
+
+    signal=signal,
+
+    ai_score=final_ai_score,
+
+    news_risk=news["risk"],
+
+    entry_quality=entry_quality,
+
+    quality_score=quality_score,
+
+    adx_value=adx_value,
+
+    volume_confirmed=volume_confirmed,
+
+    trend_aligned=trend_aligned,
+
+    rsi_valid=rsi_valid,
+
+    tp_sl_valid=valid_levels
+)
+
+
+final_signal = final_trade["signal"]
+
+final_reason = final_trade["reason"]
             "Rejected"
         )
 
