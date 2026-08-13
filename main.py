@@ -59,10 +59,7 @@ MARKETS = [
     ("NZDUSD=X", "NZD/USD"),
 
     # CRYPTO
-    ("BTC-USD", "BTC/USD"),
-    ("ETH-USD", "ETH/USD"),
-    ("SOL-USD", "SOL/USD"),
-    ("BNB-USD", "BNB/USD"),
+    
 ]
 
 
