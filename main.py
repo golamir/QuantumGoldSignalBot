@@ -126,14 +126,25 @@ def is_weekend():
 # =========================================================
 # DATA
 # =========================================================
-
 def get_data(symbol, interval="5m"):
-
     try:
+        print(f"Downloading {symbol} {interval} data...")
+
+        if interval == "5m":
+            period = "7d"
+
+        elif interval == "15m":
+            period = "60d"
+
+        elif interval == "1h":
+            period = "730d"
+
+        else:
+            period = "60d"
 
         data = yf.download(
-            symbol,
-            period="7d",
+            tickers=symbol,
+            period=period,
             interval=interval,
             progress=False,
             auto_adjust=False,
@@ -141,23 +152,67 @@ def get_data(symbol, interval="5m"):
         )
 
         if data is None or data.empty:
+            print(
+                f"{symbol}: EMPTY DATA "
+                f"interval={interval}"
+            )
+            return None
 
+        # Flatten MultiIndex
+        if getattr(data.columns, "nlevels", 1) > 1:
+            data.columns = [
+                col[0] if isinstance(col, tuple) else col
+                for col in data.columns
+            ]
+
+        required_columns = [
+            "Close",
+            "High",
+            "Low",
+            "Volume"
+        ]
+
+        missing = [
+            col
+            for col in required_columns
+            if col not in data.columns
+        ]
+
+        if missing:
+            print(
+                f"{symbol}: missing columns "
+                f"{missing}"
+            )
+            return None
+
+        data = data.dropna(
+            subset=[
+                "Close",
+                "High",
+                "Low"
+            ]
+        )
+
+        print(
+            f"{symbol} {interval}: "
+            f"{len(data)} candles received"
+        )
+
+        if len(data) < 60:
+            print(
+                f"{symbol}: insufficient data "
+                f"({len(data)} candles)"
+            )
             return None
 
         return data
 
     except Exception as e:
-
         print(
-            f"Data error {symbol}: {e}"
+            f"Data error {symbol} "
+            f"{interval}: {e}"
         )
-
         return None
-
-
-# =========================================================
-# PREPARE DATA
-# =========================================================
 
 def prepare_data(symbol, interval="5m"):
 
