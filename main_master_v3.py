@@ -1,3 +1,4 @@
+
 import os
 import asyncio
 import datetime
@@ -23,7 +24,9 @@ from no_trade_filter import apply_no_trade_filter
 # MASTER FILTER V3
 #
 # GainzAlgo V2 Essential + GainzAlgo Pro integrated
+# Smart Money confirmations = SOFT / BONUS
 # ============================================================
+
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -74,6 +77,7 @@ MARKETS = [
     ("NZDUSD=X", "NZD/USD"),
 ]
 
+
 CRYPTO_MARKETS = [
     ("BTC-USD", "BTC/USD"),
     ("ETH-USD", "ETH/USD"),
@@ -96,10 +100,18 @@ LIQUIDITY_LOOKBACK = 30
 # ============================================================
 
 def is_valid_number(value):
+
     try:
+
         value = float(value)
-        return math.isfinite(value) and value > 0
+
+        return (
+            math.isfinite(value)
+            and value > 0
+        )
+
     except Exception:
+
         return False
 
 
@@ -123,24 +135,37 @@ def get_price_decimals(symbol):
 
 
 def format_price(value, symbol):
-    return f"{float(value):.{get_price_decimals(symbol)}f}"
+
+    return (
+        f"{float(value):."
+        f"{get_price_decimals(symbol)}f}"
+    )
 
 
 def is_weekend():
-    return datetime.datetime.utcnow().weekday() in [5, 6]
+
+    return (
+        datetime.datetime.utcnow().weekday()
+        in [5, 6]
+    )
 
 
 def safe_float(series, index=-1):
 
     try:
-        value = float(series.iloc[index])
+
+        value = float(
+            series.iloc[index]
+        )
 
         if math.isfinite(value):
+
             return value
 
         return None
 
     except Exception:
+
         return None
 
 
@@ -153,7 +178,8 @@ def get_data(symbol, interval="5m"):
     try:
 
         print(
-            f"Downloading {symbol} {interval} data..."
+            f"Downloading {symbol} "
+            f"{interval} data..."
         )
 
         period = {
@@ -231,7 +257,8 @@ def get_data(symbol, interval="5m"):
         if len(data) < 60:
 
             print(
-                f"{symbol}: insufficient data "
+                f"{symbol}: "
+                f"insufficient data "
                 f"({len(data)} candles)"
             )
 
@@ -257,6 +284,7 @@ def prepare_data(symbol, interval="5m"):
     )
 
     if data is None:
+
         return None
 
     try:
@@ -267,31 +295,63 @@ def prepare_data(symbol, interval="5m"):
         low = data["Low"]
         volume = data["Volume"]
 
-        if hasattr(open_price, "columns"):
-            open_price = open_price.iloc[:, 0]
+        if hasattr(
+            open_price,
+            "columns"
+        ):
+            open_price = (
+                open_price.iloc[:, 0]
+            )
 
-        if hasattr(close, "columns"):
+        if hasattr(
+            close,
+            "columns"
+        ):
             close = close.iloc[:, 0]
 
-        if hasattr(high, "columns"):
+        if hasattr(
+            high,
+            "columns"
+        ):
             high = high.iloc[:, 0]
 
-        if hasattr(low, "columns"):
+        if hasattr(
+            low,
+            "columns"
+        ):
             low = low.iloc[:, 0]
 
-        if hasattr(volume, "columns"):
+        if hasattr(
+            volume,
+            "columns"
+        ):
             volume = volume.iloc[:, 0]
 
-        open_price = open_price.dropna()
-        close = close.dropna()
-        high = high.dropna()
-        low = low.dropna()
-        volume = volume.fillna(0)
+        open_price = (
+            open_price.dropna()
+        )
+
+        close = (
+            close.dropna()
+        )
+
+        high = (
+            high.dropna()
+        )
+
+        low = (
+            low.dropna()
+        )
+
+        volume = (
+            volume.fillna(0)
+        )
 
         if len(close) < 220:
 
             print(
-                f"{symbol}: insufficient prepared "
+                f"{symbol}: "
+                f"insufficient prepared "
                 f"data ({len(close)})"
             )
 
@@ -338,23 +398,36 @@ def find_recent_swings(
         len(high) - lookback
     ):
 
-        current_high = float(high.iloc[i])
-        current_low = float(low.iloc[i])
+        current_high = float(
+            high.iloc[i]
+        )
+
+        current_low = float(
+            low.iloc[i]
+        )
 
         left_high = float(
-            high.iloc[i - lookback:i].max()
+            high.iloc[
+                i - lookback:i
+            ].max()
         )
 
         right_high = float(
-            high.iloc[i + 1:i + lookback + 1].max()
+            high.iloc[
+                i + 1:i + lookback + 1
+            ].max()
         )
 
         left_low = float(
-            low.iloc[i - lookback:i].min()
+            low.iloc[
+                i - lookback:i
+            ].min()
         )
 
         right_low = float(
-            low.iloc[i + 1:i + lookback + 1].min()
+            low.iloc[
+                i + 1:i + lookback + 1
+            ].min()
         )
 
         if (
@@ -397,9 +470,15 @@ def analyze_structure(
                 "bearish_choch": False
             }
 
-        highs, lows = find_recent_swings(
-            high.iloc[:last_i + 1],
-            low.iloc[:last_i + 1]
+        highs, lows = (
+            find_recent_swings(
+                high.iloc[
+                    :last_i + 1
+                ],
+                low.iloc[
+                    :last_i + 1
+                ]
+            )
         )
 
         recent_highs = highs[-3:]
@@ -433,12 +512,14 @@ def analyze_structure(
 
         bullish_choch = (
             len(recent_highs) >= 2
-            and last_close > recent_highs[-2][1]
+            and last_close
+            > recent_highs[-2][1]
         )
 
         bearish_choch = (
             len(recent_lows) >= 2
-            and last_close < recent_lows[-2][1]
+            and last_close
+            < recent_lows[-2][1]
         )
 
         return {
@@ -550,7 +631,10 @@ def detect_fvg(
 
         i = len(close) - 2
 
-        if i < 2 or atr_value <= 0:
+        if (
+            i < 2
+            or atr_value <= 0
+        ):
 
             return {
                 "bullish": False,
@@ -607,7 +691,10 @@ def detect_displacement(
 
         i = len(close) - 2
 
-        if i < 1 or atr_value <= 0:
+        if (
+            i < 1
+            or atr_value <= 0
+        ):
 
             return {
                 "bullish": False,
@@ -634,16 +721,19 @@ def detect_displacement(
 
         strong = (
             body >= atr_value * 0.60
-            and candle_range >= atr_value * 0.80
+            and candle_range
+            >= atr_value * 0.80
         )
 
         return {
             "bullish": (
-                current_close > previous_close
+                current_close
+                > previous_close
                 and strong
             ),
             "bearish": (
-                current_close < previous_close
+                current_close
+                < previous_close
                 and strong
             )
         }
@@ -661,7 +751,7 @@ def detect_displacement(
 
 
 # ============================================================
-# GAINZALGO V2 ESSENTIAL
+# GAINZALGO V2
 # ============================================================
 
 def detect_gainzalgo_v2(
@@ -714,8 +804,6 @@ def detect_gainzalgo_v2(
             low.iloc[i]
         )
 
-        previous_close_for_tr = previous_close
-
         tr1 = (
             current_high
             - current_low
@@ -723,12 +811,12 @@ def detect_gainzalgo_v2(
 
         tr2 = abs(
             current_high
-            - previous_close_for_tr
+            - previous_close
         )
 
         tr3 = abs(
             current_low
-            - previous_close_for_tr
+            - previous_close
         )
 
         true_range = max(
@@ -787,11 +875,13 @@ def detect_gainzalgo_v2(
         )
 
         price_decrease = (
-            current_close < close_delta
+            current_close
+            < close_delta
         )
 
         price_increase = (
-            current_close > close_delta
+            current_close
+            > close_delta
         )
 
         gainz_buy = (
@@ -811,13 +901,20 @@ def detect_gainzalgo_v2(
         return {
             "buy": gainz_buy,
             "sell": gainz_sell,
-            "bullish_engulfing": bullish_engulfing,
-            "bearish_engulfing": bearish_engulfing,
-            "stable_candle": stable_candle,
-            "rsi_buy": rsi_buy,
-            "rsi_sell": rsi_sell,
-            "price_decrease": price_decrease,
-            "price_increase": price_increase
+            "bullish_engulfing":
+                bullish_engulfing,
+            "bearish_engulfing":
+                bearish_engulfing,
+            "stable_candle":
+                stable_candle,
+            "rsi_buy":
+                rsi_buy,
+            "rsi_sell":
+                rsi_sell,
+            "price_decrease":
+                price_decrease,
+            "price_increase":
+                price_increase
         }
 
     except Exception as e:
@@ -964,11 +1061,13 @@ def detect_gainzalgo_pro(
         )
 
         price_decrease = (
-            current_close < close_delta
+            current_close
+            < close_delta
         )
 
         price_increase = (
-            current_close > close_delta
+            current_close
+            > close_delta
         )
 
         gainz_buy = (
@@ -988,13 +1087,20 @@ def detect_gainzalgo_pro(
         return {
             "buy": gainz_buy,
             "sell": gainz_sell,
-            "bullish_engulfing": bullish_engulfing,
-            "bearish_engulfing": bearish_engulfing,
-            "stable_candle": stable_candle,
-            "rsi_buy": rsi_buy,
-            "rsi_sell": rsi_sell,
-            "price_decrease": price_decrease,
-            "price_increase": price_increase
+            "bullish_engulfing":
+                bullish_engulfing,
+            "bearish_engulfing":
+                bearish_engulfing,
+            "stable_candle":
+                stable_candle,
+            "rsi_buy":
+                rsi_buy,
+            "rsi_sell":
+                rsi_sell,
+            "price_decrease":
+                price_decrease,
+            "price_increase":
+                price_increase
         }
 
     except Exception as e:
@@ -1102,7 +1208,8 @@ def validate_trade_levels(
 
             return (
                 False,
-                f"Risk/Reward too low ({rr:.2f})"
+                f"Risk/Reward too low "
+                f"({rr:.2f})"
             )
 
         return (
@@ -1144,8 +1251,13 @@ def calculate_quality_score(
 
     score = 0
 
-    buy = signal == "🟢 BUY"
-    sell = signal == "🔴 SELL"
+    buy = (
+        signal == "🟢 BUY"
+    )
+
+    sell = (
+        signal == "🔴 SELL"
+    )
 
     if (
         (buy and ema_bullish)
@@ -1176,70 +1288,91 @@ def calculate_quality_score(
         score += 10
 
     if adx_value >= 30:
+
         score += 15
 
     elif adx_value >= 25:
+
         score += 10
 
     elif adx_value >= 20:
+
         score += 5
 
     if volume_confirmed:
+
         score += 10
 
     if buy:
 
         if 45 < rsi_value < 70:
+
             score += 10
 
         elif 40 < rsi_value < 75:
+
             score += 5
 
     elif sell:
 
         if 30 < rsi_value < 55:
+
             score += 10
 
         elif 25 < rsi_value < 60:
+
             score += 5
 
     if news_risk == "HIGH":
+
         score -= 20
 
     elif news_risk == "MEDIUM":
+
         score += 5
 
     else:
+
         score += 10
 
     if entry_quality == "A":
+
         score += 10
 
     elif entry_quality == "B":
+
         score += 5
 
     else:
+
         score -= 10
 
     if structure_confirmed:
+
         score += 5
 
     if liquidity_confirmed:
+
         score += 5
 
     if fvg_confirmed:
+
         score += 5
 
     if displacement_confirmed:
+
         score += 5
 
     if dxy_confirmed:
+
         score += 5
 
     if gainz_v2_confirmed:
+
         score += GAINZ_V2_BONUS
 
     if gainz_pro_confirmed:
+
         score += GAINZ_PRO_BONUS
 
     return max(
@@ -1282,28 +1415,32 @@ def master_quality_filter(
 
         return (
             False,
-            f"AI Score below {MIN_AI_SCORE}"
+            f"AI Score below "
+            f"{MIN_AI_SCORE}"
         )
 
     if quality_score < MIN_QUALITY_SCORE:
 
         return (
             False,
-            f"Quality below {MIN_QUALITY_SCORE}"
+            f"Quality below "
+            f"{MIN_QUALITY_SCORE}"
         )
 
     if entry_quality != "A":
 
         return (
             False,
-            f"Entry Quality {entry_quality}"
+            f"Entry Quality "
+            f"{entry_quality}"
         )
 
     if adx_value < MIN_ADX:
 
         return (
             False,
-            f"ADX below {MIN_ADX}"
+            f"ADX below "
+            f"{MIN_ADX}"
         )
 
     if not volume_confirmed:
@@ -1367,10 +1504,15 @@ def analyze_market(
         if is_weekend():
 
             print(
-                f"{name}: Weekend - skipped"
+                f"{name}: "
+                f"Weekend - skipped"
             )
 
             return None
+
+        # ====================================================
+        # NEWS
+        # ====================================================
 
         try:
 
@@ -1388,10 +1530,15 @@ def analyze_market(
         except Exception as e:
 
             print(
-                f"{name}: News error: {e}"
+                f"{name}: "
+                f"News error: {e}"
             )
 
             news_risk = "HIGH"
+
+        # ====================================================
+        # DATA
+        # ====================================================
 
         m5 = prepare_data(
             symbol,
@@ -1430,15 +1577,25 @@ def analyze_market(
                 "5m"
             )
 
+        # ====================================================
+        # M5 DATA
+        # ====================================================
+
         open_price = m5["open"]
         close = m5["close"]
         high = m5["high"]
         low = m5["low"]
         volume = m5["volume"]
 
+        # ====================================================
+        # LIVE PRICE
+        # ====================================================
+
         if symbol == "GC=F":
 
-            price = get_live_gold_price()
+            price = (
+                get_live_gold_price()
+            )
 
         else:
 
@@ -1455,7 +1612,12 @@ def analyze_market(
             )
 
         if price is None:
+
             return None
+
+        # ====================================================
+        # SUPPORT / RESISTANCE
+        # ====================================================
 
         sr = find_support_resistance(
             close
@@ -1465,7 +1627,8 @@ def analyze_market(
 
             print(
                 f"{name}: "
-                f"Support/Resistance unavailable"
+                f"Support/Resistance "
+                f"unavailable"
             )
 
             return None
@@ -1477,6 +1640,10 @@ def analyze_market(
         resistance = float(
             sr["resistance"]
         )
+
+        # ====================================================
+        # INDICATORS
+        # ====================================================
 
         ema50 = ta.trend.ema_indicator(
             close,
@@ -1497,11 +1664,14 @@ def analyze_market(
             close
         )
 
-        atr = ta.volatility.average_true_range(
-            high,
-            low,
-            close,
-            14
+        atr = (
+            ta.volatility
+            .average_true_range(
+                high,
+                low,
+                close,
+                14
+            )
         )
 
         adx = ta.trend.ADXIndicator(
@@ -1566,39 +1736,65 @@ def analyze_market(
 
             return None
 
-        gainz_v2 = detect_gainzalgo_v2(
-            open_price,
-            close,
-            high,
-            low,
-            r
+        # ====================================================
+        # GAINZALGO
+        # ====================================================
+
+        gainz_v2 = (
+            detect_gainzalgo_v2(
+                open_price,
+                close,
+                high,
+                low,
+                r
+            )
         )
 
-        gainz_v2_buy = gainz_v2["buy"]
-        gainz_v2_sell = gainz_v2["sell"]
-
-        gainz_pro = detect_gainzalgo_pro(
-            open_price,
-            close,
-            high,
-            low,
-            r
+        gainz_v2_buy = (
+            gainz_v2["buy"]
         )
 
-        gainz_pro_buy = gainz_pro["buy"]
-        gainz_pro_sell = gainz_pro["sell"]
+        gainz_v2_sell = (
+            gainz_v2["sell"]
+        )
+
+        gainz_pro = (
+            detect_gainzalgo_pro(
+                open_price,
+                close,
+                high,
+                low,
+                r
+            )
+        )
+
+        gainz_pro_buy = (
+            gainz_pro["buy"]
+        )
+
+        gainz_pro_sell = (
+            gainz_pro["sell"]
+        )
 
         print(
             f"{name}: "
-            f"Gainz V2 BUY={gainz_v2_buy} "
-            f"SELL={gainz_v2_sell}"
+            f"Gainz V2 BUY="
+            f"{gainz_v2_buy} "
+            f"SELL="
+            f"{gainz_v2_sell}"
         )
 
         print(
             f"{name}: "
-            f"Gainz Pro BUY={gainz_pro_buy} "
-            f"SELL={gainz_pro_sell}"
+            f"Gainz Pro BUY="
+            f"{gainz_pro_buy} "
+            f"SELL="
+            f"{gainz_pro_sell}"
         )
+
+        # ====================================================
+        # TREND
+        # ====================================================
 
         ema_bullish = (
             e50 > e200
@@ -1608,14 +1804,22 @@ def analyze_market(
             m > ms
         )
 
-        m15_ema50 = ta.trend.ema_indicator(
-            m15["close"],
-            50
+        # ====================================================
+        # M15
+        # ====================================================
+
+        m15_ema50 = (
+            ta.trend.ema_indicator(
+                m15["close"],
+                50
+            )
         )
 
-        m15_ema200 = ta.trend.ema_indicator(
-            m15["close"],
-            200
+        m15_ema200 = (
+            ta.trend.ema_indicator(
+                m15["close"],
+                200
+            )
         )
 
         m15_e50 = safe_float(
@@ -1639,14 +1843,22 @@ def analyze_market(
             m15_e50 > m15_e200
         )
 
-        h1_ema50 = ta.trend.ema_indicator(
-            h1["close"],
-            50
+        # ====================================================
+        # H1
+        # ====================================================
+
+        h1_ema50 = (
+            ta.trend.ema_indicator(
+                h1["close"],
+                50
+            )
         )
 
-        h1_ema200 = ta.trend.ema_indicator(
-            h1["close"],
-            200
+        h1_ema200 = (
+            ta.trend.ema_indicator(
+                h1["close"],
+                200
+            )
         )
 
         h1_e50 = safe_float(
@@ -1669,6 +1881,10 @@ def analyze_market(
         h1_bullish = (
             h1_e50 > h1_e200
         )
+
+        # ====================================================
+        # VOLUME
+        # ====================================================
 
         v = volume.fillna(0)
 
@@ -1703,137 +1919,157 @@ def analyze_market(
             >= avg_volume * 1.05
         )
 
-        structure = analyze_structure(
-            close,
-            high,
-            low
+        # ====================================================
+        # SMART MONEY
+        # ====================================================
+
+        structure = (
+            analyze_structure(
+                close,
+                high,
+                low
+            )
         )
 
-        liquidity = detect_liquidity_sweep(
-            close,
-            high,
-            low
+        liquidity = (
+            detect_liquidity_sweep(
+                close,
+                high,
+                low
+            )
         )
 
-        fvg = detect_fvg(
-            close,
-            high,
-            low,
-            atr_value
+        fvg = (
+            detect_fvg(
+                close,
+                high,
+                low,
+                atr_value
+            )
         )
 
-        displacement = detect_displacement(
-            close,
-            high,
-            low,
-            atr_value
+        displacement = (
+            detect_displacement(
+                close,
+                high,
+                low,
+                atr_value
+            )
         )
+
+        # ====================================================
+        # BUY / SELL SCORING
+        # ====================================================
 
         buy_score = 0
         sell_score = 0
 
         if ema_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if macd_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if m15_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if h1_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if 45 < r < 70:
+
             buy_score += 10
 
         if 30 < r < 55:
+
             sell_score += 10
 
         if adx_value >= 25:
+
             buy_score += 10
             sell_score += 10
 
         if gainz_v2_buy:
+
             buy_score += GAINZ_V2_BONUS
 
         if gainz_v2_sell:
+
             sell_score += GAINZ_V2_BONUS
 
         if gainz_pro_buy:
+
             buy_score += GAINZ_PRO_BONUS
 
         if gainz_pro_sell:
+
             sell_score += GAINZ_PRO_BONUS
 
         if (
             structure["bullish_bos"]
             or structure["bullish_choch"]
         ):
+
             buy_score += 10
 
         if (
             structure["bearish_bos"]
             or structure["bearish_choch"]
         ):
+
             sell_score += 10
 
         if liquidity["bullish"]:
+
             buy_score += 10
 
         if liquidity["bearish"]:
+
             sell_score += 10
 
         if displacement["bullish"]:
+
             buy_score += 5
 
         if displacement["bearish"]:
+
             sell_score += 5
 
         if fvg["bullish"]:
+
             buy_score += 5
 
         if fvg["bearish"]:
+
             sell_score += 5
 
         # ====================================================
-        # V3 DIRECTION CANDIDATE FILTER
-        #
-        # IMPORTANT:
-        # Direction is only a candidate here.
-        # It is NOT the final signal.
-        #
-        # Final hard filters remain:
-        # AI Score >= 80
-        # Quality >= 80
-        # ADX >= 25
-        # Entry Quality A
-        # Volume
-        # M5/M15/H1 alignment
-        # RSI
-        # News
-        # TP/SL
+        # SIGNAL CANDIDATE
         # ====================================================
 
-        DIRECTION_MIN_SCORE = 55
-        DIRECTION_MIN_MARGIN = 10
-
-        # ---------------- BUY CANDIDATE ----------------
-
         if (
-            buy_score >= DIRECTION_MIN_SCORE
+            buy_score >= 70
             and buy_score > sell_score
-            and (
-                buy_score - sell_score
-            ) >= DIRECTION_MIN_MARGIN
         ):
 
             signal = "🟢 BUY"
@@ -1843,20 +2079,9 @@ def analyze_market(
                 buy_score
             )
 
-            print(
-                f"{name}: BUY candidate "
-                f"BUY={buy_score} "
-                f"SELL={sell_score}"
-            )
-
-        # ---------------- SELL CANDIDATE ----------------
-
         elif (
-            sell_score >= DIRECTION_MIN_SCORE
+            sell_score >= 70
             and sell_score > buy_score
-            and (
-                sell_score - buy_score
-            ) >= DIRECTION_MIN_MARGIN
         ):
 
             signal = "🔴 SELL"
@@ -1865,14 +2090,6 @@ def analyze_market(
                 100,
                 sell_score
             )
-
-            print(
-                f"{name}: SELL candidate "
-                f"BUY={buy_score} "
-                f"SELL={sell_score}"
-            )
-
-        # ---------------- NO CLEAR DIRECTION ----------------
 
         else:
 
@@ -1884,6 +2101,17 @@ def analyze_market(
             )
 
             return None
+
+        print(
+            f"{name}: "
+            f"{signal} candidate "
+            f"BUY={buy_score} "
+            f"SELL={sell_score}"
+        )
+
+        # ====================================================
+        # GAINZ CONFIRMATION
+        # ====================================================
 
         if signal == "🟢 BUY":
 
@@ -1904,6 +2132,10 @@ def analyze_market(
             gainz_pro_confirmed = (
                 gainz_pro_sell
             )
+
+        # ====================================================
+        # ENTRY
+        # ====================================================
 
         entry = check_entry(
             signal,
@@ -1928,6 +2160,10 @@ def analyze_market(
             "C"
         )
 
+        # ====================================================
+        # RSI VALIDATION
+        # ====================================================
+
         if signal == "🟢 BUY":
 
             rsi_valid = (
@@ -1939,6 +2175,10 @@ def analyze_market(
             rsi_valid = (
                 30 < r < 55
             )
+
+        # ====================================================
+        # TREND ALIGNMENT
+        # ====================================================
 
         if signal == "🟢 BUY":
 
@@ -1957,6 +2197,10 @@ def analyze_market(
                 and not m15_bullish
                 and not h1_bullish
             )
+
+        # ====================================================
+        # SMART MONEY DIRECTION
+        # ====================================================
 
         if signal == "🟢 BUY":
 
@@ -1996,6 +2240,10 @@ def analyze_market(
                 displacement["bearish"]
             )
 
+        # ====================================================
+        # TP / SL MULTIPLIERS
+        # ====================================================
+
         if symbol == "GC=F":
 
             sl_mult = 2.0
@@ -2015,6 +2263,10 @@ def analyze_market(
 
             sl_mult = 2.0
             tp_mult = 3.0
+
+        # ====================================================
+        # TP / SL
+        # ====================================================
 
         if signal == "🟢 BUY":
 
@@ -2081,6 +2333,10 @@ def analyze_market(
 
             return None
 
+        # ====================================================
+        # DXY
+        # ====================================================
+
         dxy_confirmed = False
 
         if (
@@ -2115,6 +2371,10 @@ def analyze_market(
                     dxy_confirmed = (
                         dxy_now > dxy_old
                     )
+
+        # ====================================================
+        # SMART SCORE
+        # ====================================================
 
         try:
 
@@ -2161,25 +2421,35 @@ def analyze_market(
                 "Smart score unavailable"
             )
 
-        quality_score = calculate_quality_score(
-            signal,
-            ema_bullish,
-            m15_bullish,
-            h1_bullish,
-            macd_bullish,
-            r,
-            adx_value,
-            volume_confirmed,
-            news_risk,
-            entry_quality,
-            structure_confirmed,
-            liquidity_confirmed,
-            fvg_confirmed,
-            displacement_confirmed,
-            dxy_confirmed,
-            gainz_v2_confirmed,
-            gainz_pro_confirmed
+        # ====================================================
+        # QUALITY SCORE
+        # ====================================================
+
+        quality_score = (
+            calculate_quality_score(
+                signal,
+                ema_bullish,
+                m15_bullish,
+                h1_bullish,
+                macd_bullish,
+                r,
+                adx_value,
+                volume_confirmed,
+                news_risk,
+                entry_quality,
+                structure_confirmed,
+                liquidity_confirmed,
+                fvg_confirmed,
+                displacement_confirmed,
+                dxy_confirmed,
+                gainz_v2_confirmed,
+                gainz_pro_confirmed
+            )
         )
+
+        # ====================================================
+        # FINAL AI SCORE
+        # ====================================================
 
         final_ai_score = max(
             0,
@@ -2194,13 +2464,26 @@ def analyze_market(
             )
         )
 
+        # ====================================================
+        # NO TRADE FILTER
+        #
+        # IMPORTANT:
+        # All real V3 values are now passed.
+        # ====================================================
+
         try:
 
             old = apply_no_trade_filter(
-                signal,
-                final_ai_score,
-                news_risk,
-                entry_quality
+                signal=signal,
+                ai_score=final_ai_score,
+                news_risk=news_risk,
+                entry_quality=entry_quality,
+                quality_score=quality_score,
+                adx_value=adx_value,
+                volume_confirmed=volume_confirmed,
+                trend_aligned=trend_aligned,
+                rsi_valid=rsi_valid,
+                tp_sl_valid=valid_levels
             )
 
             filtered_signal = old.get(
@@ -2239,23 +2522,30 @@ def analyze_market(
 
             return None
 
-        passed, reason = master_quality_filter(
-            filtered_signal,
-            final_ai_score,
-            quality_score,
-            entry_quality,
-            adx_value,
-            volume_confirmed,
-            trend_aligned,
-            rsi_valid,
-            news_risk,
-            valid_levels
+        # ====================================================
+        # MASTER V3 HARD FILTER
+        # ====================================================
+
+        passed, reason = (
+            master_quality_filter(
+                filtered_signal,
+                final_ai_score,
+                quality_score,
+                entry_quality,
+                adx_value,
+                volume_confirmed,
+                trend_aligned,
+                rsi_valid,
+                news_risk,
+                valid_levels
+            )
         )
 
         if not passed:
 
             print(
-                f"\n{name}: V3 REJECTED"
+                f"\n{name}: "
+                f"V3 REJECTED"
             )
 
             print(
@@ -2320,6 +2610,10 @@ def analyze_market(
 
             return None
 
+        # ====================================================
+        # FINAL TP / SL VALIDATION
+        # ====================================================
+
         final_valid, _ = (
             validate_trade_levels(
                 filtered_signal,
@@ -2332,13 +2626,20 @@ def analyze_market(
         )
 
         if not final_valid:
+
             return None
+
+        # ====================================================
+        # DUPLICATE SIGNAL FILTER
+        # ====================================================
 
         try:
 
-            allowed = allow_new_signal(
-                filtered_signal,
-                price
+            allowed = (
+                allow_new_signal(
+                    filtered_signal,
+                    price
+                )
             )
 
         except Exception as e:
@@ -2358,6 +2659,10 @@ def analyze_market(
             )
 
             return None
+
+        # ====================================================
+        # SAVE
+        # ====================================================
 
         try:
 
@@ -2384,6 +2689,10 @@ def analyze_market(
                 f"{name}: "
                 f"Save error: {e}"
             )
+
+        # ====================================================
+        # MESSAGE
+        # ====================================================
 
         direction = (
             "BUY"
@@ -2884,4 +3193,5 @@ Crypto:
 # ============================================================
 
 if __name__ == "__main__":
+
     asyncio.run(main())
