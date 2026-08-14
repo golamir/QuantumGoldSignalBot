@@ -1,3 +1,8 @@
+# ============================================================
+# QuantumGold - NO TRADE FILTER
+# MASTER FILTER V3 COMPATIBLE
+# ============================================================
+
 MIN_AI_SCORE = 80
 MIN_QUALITY_SCORE = 80
 MIN_ADX = 25
@@ -16,9 +21,38 @@ def apply_no_trade_filter(
     tp_sl_valid=True
 ):
 
-    # =====================================================
-    # SIGNAL
-    # =====================================================
+    # ========================================================
+    # IMPORTANT V3 DESIGN
+    # ========================================================
+    #
+    # AI Score
+    # Quality Score
+    # ADX
+    # Volume
+    # M5/M15/H1 Trend
+    # RSI
+    # TP/SL
+    #
+    # are NOT rejected here.
+    #
+    # These are handled by:
+    #
+    # master_quality_filter()
+    #
+    # in main_master_v3.py
+    #
+    # This prevents the No-Trade Filter from rejecting a
+    # candidate before MASTER FILTER V3 gets the final decision.
+    #
+    # GainzAlgo V2 / Pro are also handled by MASTER V3
+    # scoring as BONUS confirmations.
+    #
+    # ========================================================
+
+
+    # ========================================================
+    # SIGNAL VALIDATION
+    # ========================================================
 
     if signal not in [
         "🟢 BUY",
@@ -30,133 +64,68 @@ def apply_no_trade_filter(
             "reason": "No clear BUY/SELL signal"
         }
 
-    # =====================================================
-    # AI SCORE
-    # =====================================================
 
-    if ai_score < MIN_AI_SCORE:
+    # ========================================================
+    # NEWS RISK
+    # ========================================================
 
-        return {
-            "signal": "⚪ WAIT",
-            "reason": (
-                f"AI Score below {MIN_AI_SCORE}"
-            )
-        }
+    try:
 
-    # =====================================================
-    # QUALITY SCORE
-    # =====================================================
+        normalized_news = str(
+            news_risk
+        ).upper().strip()
 
-    if quality_score < MIN_QUALITY_SCORE:
+    except Exception:
 
-        return {
-            "signal": "⚪ WAIT",
-            "reason": (
-                f"Quality Score below "
-                f"{MIN_QUALITY_SCORE}"
-            )
-        }
+        normalized_news = "HIGH"
 
-    # =====================================================
-    # ENTRY QUALITY
-    # =====================================================
 
-    if entry_quality != "A":
+    # HIGH NEWS RISK = NO TRADE
+    #
+    # Master V3 also checks this later.
+    # Keeping it here provides an early safety stop.
 
-        return {
-            "signal": "⚪ WAIT",
-            "reason": (
-                f"Entry Quality {entry_quality}, "
-                f"required A"
-            )
-        }
-
-    # =====================================================
-    # NEWS
-    # =====================================================
-
-    if news_risk == "HIGH":
+    if normalized_news == "HIGH":
 
         return {
             "signal": "⚪ WAIT",
             "reason": "HIGH news risk"
         }
 
-    # =====================================================
-    # ADX
-    # =====================================================
 
-    try:
-
-        adx_value = float(adx_value)
-
-    except Exception:
-
-        adx_value = 0
-
-    if adx_value < MIN_ADX:
-
-        return {
-            "signal": "⚪ WAIT",
-            "reason": (
-                f"ADX below {MIN_ADX}"
-            )
-        }
-
-    # =====================================================
-    # VOLUME
-    # =====================================================
-
-    if not volume_confirmed:
-
-        return {
-            "signal": "⚪ WAIT",
-            "reason": "Volume confirmation missing"
-        }
-
-    # =====================================================
-    # M5 / M15 / H1 TREND
-    # =====================================================
-
-    if not trend_aligned:
-
-        return {
-            "signal": "⚪ WAIT",
-            "reason": (
-                "M5/M15/H1 trend conflict"
-            )
-        }
-
-    # =====================================================
-    # RSI
-    # =====================================================
-
-    if not rsi_valid:
-
-        return {
-            "signal": "⚪ WAIT",
-            "reason": "RSI not in valid entry zone"
-        }
-
-    # =====================================================
-    # TP / SL
-    # =====================================================
-
-    if not tp_sl_valid:
-
-        return {
-            "signal": "⚪ WAIT",
-            "reason": "Invalid TP/SL"
-        }
-
-    # =====================================================
-    # FINAL APPROVAL
-    # =====================================================
+    # ========================================================
+    # FINAL CANDIDATE APPROVAL
+    # ========================================================
+    #
+    # IMPORTANT:
+    #
+    # We intentionally DO NOT check:
+    #
+    # ai_score
+    # quality_score
+    # entry_quality
+    # adx_value
+    # volume_confirmed
+    # trend_aligned
+    # rsi_valid
+    # tp_sl_valid
+    #
+    # here.
+    #
+    # Those checks belong to MASTER FILTER V3.
+    #
+    # This allows the candidate to reach:
+    #
+    # master_quality_filter()
+    #
+    # where all V3 hard filters are evaluated together.
+    #
+    # ========================================================
 
     return {
         "signal": signal,
         "reason": (
-            "✅ MASTER FILTER PASSED - "
-            "80+ QUALITY SETUP"
+            "No-Trade basic filter passed; "
+            "MASTER V3 hard filters pending"
         )
     }
