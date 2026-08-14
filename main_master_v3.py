@@ -1804,9 +1804,36 @@ def analyze_market(
         if fvg["bearish"]:
             sell_score += 5
 
+        # ====================================================
+        # V3 DIRECTION CANDIDATE FILTER
+        #
+        # IMPORTANT:
+        # Direction is only a candidate here.
+        # It is NOT the final signal.
+        #
+        # Final hard filters remain:
+        # AI Score >= 80
+        # Quality >= 80
+        # ADX >= 25
+        # Entry Quality A
+        # Volume
+        # M5/M15/H1 alignment
+        # RSI
+        # News
+        # TP/SL
+        # ====================================================
+
+        DIRECTION_MIN_SCORE = 55
+        DIRECTION_MIN_MARGIN = 10
+
+        # ---------------- BUY CANDIDATE ----------------
+
         if (
-            buy_score >= 70
+            buy_score >= DIRECTION_MIN_SCORE
             and buy_score > sell_score
+            and (
+                buy_score - sell_score
+            ) >= DIRECTION_MIN_MARGIN
         ):
 
             signal = "🟢 BUY"
@@ -1816,9 +1843,20 @@ def analyze_market(
                 buy_score
             )
 
+            print(
+                f"{name}: BUY candidate "
+                f"BUY={buy_score} "
+                f"SELL={sell_score}"
+            )
+
+        # ---------------- SELL CANDIDATE ----------------
+
         elif (
-            sell_score >= 70
+            sell_score >= DIRECTION_MIN_SCORE
             and sell_score > buy_score
+            and (
+                sell_score - buy_score
+            ) >= DIRECTION_MIN_MARGIN
         ):
 
             signal = "🔴 SELL"
@@ -1827,6 +1865,14 @@ def analyze_market(
                 100,
                 sell_score
             )
+
+            print(
+                f"{name}: SELL candidate "
+                f"BUY={buy_score} "
+                f"SELL={sell_score}"
+            )
+
+        # ---------------- NO CLEAR DIRECTION ----------------
 
         else:
 
@@ -2588,11 +2634,6 @@ H1 Major Trend
 
 QuantumGold MASTER FILTER V3
 """
-
-    # ========================================================
-    # FIX:
-    # Close the main try block of analyze_market()
-    # ========================================================
 
     except Exception as e:
 
