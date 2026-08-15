@@ -22,7 +22,8 @@ from no_trade_filter import apply_no_trade_filter
 # QuantumGold AI Signal Bot
 # MASTER FILTER V3
 #
-# GainzAlgo V2 Essential + GainzAlgo Pro integrated
+# Gold + Forex + Crypto
+# GainzAlgo V2 Essential + GainzAlgo Pro
 # Smart Money confirmations = SOFT / BONUS
 # ============================================================
 
@@ -63,8 +64,11 @@ GAINZ_PRO_BONUS = 10
 # MARKETS
 # ============================================================
 
-CRYPTO_ENABLED = False
+# CRYPTO IS ENABLED
+CRYPTO_ENABLED = True
 
+
+# Gold + Forex
 MARKETS = [
     ("GC=F", "XAU/USD"),
     ("EURUSD=X", "EUR/USD"),
@@ -77,6 +81,7 @@ MARKETS = [
 ]
 
 
+# Crypto
 CRYPTO_MARKETS = [
     ("BTC-USD", "BTC/USD"),
     ("ETH-USD", "ETH/USD"),
@@ -132,13 +137,6 @@ def get_price_decimals(symbol):
 
 
 def format_price(value, symbol):
-
-    """
-    IMPORTANT:
-    Do NOT use nested f-strings here.
-    The previous version caused:
-    SyntaxError: f-string: expecting '}'
-    """
 
     try:
 
@@ -1292,15 +1290,12 @@ def calculate_quality_score(
         score += 10
 
     if adx_value >= 30:
-
         score += 15
 
     elif adx_value >= 25:
-
         score += 10
 
     elif adx_value >= 20:
-
         score += 5
 
     if volume_confirmed:
@@ -2618,8 +2613,8 @@ def analyze_market(
             )
 
         # ====================================================
-        # MESSAGE
-        # SIMPLE TELEGRAM FORMAT
+        # TELEGRAM MESSAGE
+        # ONLY SIGNAL / SL / TP
         # ====================================================
 
         direction = (
@@ -2686,7 +2681,7 @@ async def main():
     )
 
     print(
-        "Markets: Gold + Forex"
+        "Markets: Gold + Forex + Crypto"
     )
 
     print(
@@ -2750,11 +2745,29 @@ async def main():
         MARKETS
     )
 
+    # ========================================================
+    # CRYPTO ENABLED
+    # ========================================================
+
     if CRYPTO_ENABLED:
 
         markets_to_scan.extend(
             CRYPTO_MARKETS
         )
+
+    print(
+        "\nMarkets scheduled for scanning:"
+    )
+
+    for symbol, name in markets_to_scan:
+
+        print(
+            f" - {name} ({symbol})"
+        )
+
+    # ========================================================
+    # SCAN ALL MARKETS
+    # ========================================================
 
     for symbol, name in markets_to_scan:
 
@@ -2778,6 +2791,10 @@ async def main():
                 f"Unexpected analysis error: "
                 f"{e}"
             )
+
+    # ========================================================
+    # SEND SIGNALS
+    # ========================================================
 
     if messages:
 
@@ -2806,6 +2823,10 @@ async def main():
             print(
                 f"Telegram error: {e}"
             )
+
+        # ====================================================
+        # DAILY REPORT
+        # ====================================================
 
         try:
 
@@ -2848,6 +2869,9 @@ Design Target:
 
 ━━━━━━━━━━━━━━━━━━━━
 
+Markets:
+Gold + Forex + Crypto
+
 GainzAlgo V2:
 ENABLED
 
@@ -2880,8 +2904,22 @@ Displacement:
 DXY:
 +5 for Gold
 
+━━━━━━━━━━━━━━━━━━━━
+
 Crypto:
 {crypto_report_status}
+
+BTC/USD:
+ENABLED
+
+ETH/USD:
+ENABLED
+
+SOL/USD:
+ENABLED
+
+BNB/USD:
+ENABLED
 """
 
             await bot.send_message(
