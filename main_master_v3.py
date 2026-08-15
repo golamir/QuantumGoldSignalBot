@@ -741,6 +741,7 @@ def detect_gainzalgo_v2(
         i = len(close) - 2
 
         if i < GAINZ_V2_DELTA:
+
             return {
                 "buy": False,
                 "sell": False,
@@ -765,9 +766,14 @@ def detect_gainzalgo_v2(
         tr2 = abs(current_high - previous_close)
         tr3 = abs(current_low - previous_close)
 
-        true_range = max(tr1, tr2, tr3)
+        true_range = max(
+            tr1,
+            tr2,
+            tr3
+        )
 
         if true_range <= 0:
+
             return {
                 "buy": False,
                 "sell": False,
@@ -802,11 +808,18 @@ def detect_gainzalgo_v2(
         rsi_sell = rsi_value > 100 - GAINZ_V2_RSI
 
         close_delta = float(
-            close.iloc[i - GAINZ_V2_DELTA]
+            close.iloc[
+                i - GAINZ_V2_DELTA
+            ]
         )
 
-        price_decrease = current_close < close_delta
-        price_increase = current_close > close_delta
+        price_decrease = (
+            current_close < close_delta
+        )
+
+        price_increase = (
+            current_close > close_delta
+        )
 
         gainz_buy = (
             bullish_engulfing
@@ -870,6 +883,7 @@ def detect_gainzalgo_pro(
         i = len(close) - 2
 
         if i < GAINZ_PRO_DELTA:
+
             return {
                 "buy": False,
                 "sell": False,
@@ -894,9 +908,14 @@ def detect_gainzalgo_pro(
         tr2 = abs(current_high - previous_close)
         tr3 = abs(current_low - previous_close)
 
-        true_range = max(tr1, tr2, tr3)
+        true_range = max(
+            tr1,
+            tr2,
+            tr3
+        )
 
         if true_range <= 0:
+
             return {
                 "buy": False,
                 "sell": False,
@@ -931,11 +950,18 @@ def detect_gainzalgo_pro(
         rsi_sell = rsi_value > 100 - GAINZ_PRO_RSI
 
         close_delta = float(
-            close.iloc[i - GAINZ_PRO_DELTA]
+            close.iloc[
+                i - GAINZ_PRO_DELTA
+            ]
         )
 
-        price_decrease = current_close < close_delta
-        price_increase = current_close > close_delta
+        price_decrease = (
+            current_close < close_delta
+        )
+
+        price_increase = (
+            current_close > close_delta
+        )
 
         gainz_buy = (
             bullish_engulfing
@@ -1009,6 +1035,7 @@ def validate_trade_levels(
             is_valid_number(x)
             for x in values
         ):
+
             return False, "Invalid price values"
 
         if signal == "🟢 BUY":
@@ -1034,24 +1061,38 @@ def validate_trade_levels(
             return False, "Invalid signal"
 
         if not valid:
+
             return False, "Invalid TP/SL structure"
 
-        risk = abs(price - stop_loss)
-        reward = abs(tp3 - price)
+        risk = abs(
+            price - stop_loss
+        )
+
+        reward = abs(
+            tp3 - price
+        )
 
         if risk <= 0:
+
             return False, "Zero risk"
 
         rr = reward / risk
 
         if rr < 1.20:
-            return False, f"Risk/Reward too low ({rr:.2f})"
 
-        return True, f"Valid TP/SL R:R={rr:.2f}"
+            return False, (
+                f"Risk/Reward too low ({rr:.2f})"
+            )
+
+        return True, (
+            f"Valid TP/SL R:R={rr:.2f}"
+        )
 
     except Exception as e:
 
-        return False, f"TP/SL validation error: {e}"
+        return False, (
+            f"TP/SL validation error: {e}"
+        )
 
 
 # ============================================================
@@ -1112,67 +1153,99 @@ def calculate_quality_score(
         score += 10
 
     if adx_value >= 30:
+
         score += 15
+
     elif adx_value >= 25:
+
         score += 10
+
     elif adx_value >= 20:
+
         score += 5
 
     if volume_confirmed:
+
         score += 10
 
     if buy:
 
         if 45 < rsi_value < 70:
+
             score += 10
+
         elif 40 < rsi_value < 75:
+
             score += 5
 
     elif sell:
 
         if 30 < rsi_value < 55:
+
             score += 10
+
         elif 25 < rsi_value < 60:
+
             score += 5
 
     if news_risk == "HIGH":
+
         score -= 20
+
     elif news_risk == "MEDIUM":
+
         score += 5
+
     else:
+
         score += 10
 
     if entry_quality == "A":
+
         score += 10
+
     elif entry_quality == "B":
+
         score += 5
+
     else:
+
         score -= 10
 
     if structure_confirmed:
+
         score += 5
 
     if liquidity_confirmed:
+
         score += 5
 
     if fvg_confirmed:
+
         score += 5
 
     if displacement_confirmed:
+
         score += 5
 
     if dxy_confirmed:
+
         score += 5
 
     if gainz_v2_confirmed:
+
         score += GAINZ_V2_BONUS
 
     if gainz_pro_confirmed:
+
         score += GAINZ_PRO_BONUS
 
     return max(
         0,
-        min(100, int(score))
+        min(
+            100,
+            int(score)
+        )
     )
 
 
@@ -1193,37 +1266,70 @@ def master_quality_filter(
     tp_sl_valid
 ):
 
-    if signal not in ["🟢 BUY", "🔴 SELL"]:
+    if signal not in [
+        "🟢 BUY",
+        "🔴 SELL"
+    ]:
+
         return False, "No clear signal"
 
     if ai_score < MIN_AI_SCORE:
-        return False, f"AI Score below {MIN_AI_SCORE}"
+
+        return False, (
+            f"AI Score below {MIN_AI_SCORE}"
+        )
 
     if quality_score < MIN_QUALITY_SCORE:
-        return False, f"Quality below {MIN_QUALITY_SCORE}"
+
+        return False, (
+            f"Quality below {MIN_QUALITY_SCORE}"
+        )
 
     if entry_quality != "A":
-        return False, f"Entry Quality {entry_quality}"
+
+        return False, (
+            f"Entry Quality {entry_quality}"
+        )
 
     if adx_value < MIN_ADX:
-        return False, f"ADX below {MIN_ADX}"
+
+        return False, (
+            f"ADX below {MIN_ADX}"
+        )
 
     if not volume_confirmed:
-        return False, "Volume confirmation missing"
+
+        return False, (
+            "Volume confirmation missing"
+        )
 
     if not trend_aligned:
-        return False, "M5/M15/H1 trend conflict"
+
+        return False, (
+            "M5/M15/H1 trend conflict"
+        )
 
     if not rsi_valid:
-        return False, "RSI not valid"
+
+        return False, (
+            "RSI not valid"
+        )
 
     if news_risk == "HIGH":
-        return False, "HIGH news risk"
+
+        return False, (
+            "HIGH news risk"
+        )
 
     if not tp_sl_valid:
-        return False, "Invalid TP/SL"
 
-    return True, "ALL MASTER V3 HARD FILTERS PASSED"
+        return False, (
+            "Invalid TP/SL"
+        )
+
+    return True, (
+        "ALL MASTER V3 HARD FILTERS PASSED"
+    )
 
 
 # ============================================================
@@ -1242,11 +1348,12 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # WEEKEND FILTER
-        # Crypto = 24/7
-        # Gold + Forex = weekdays only
         # ====================================================
 
-        if is_weekend() and not is_crypto_symbol(symbol):
+        if (
+            is_weekend()
+            and not is_crypto_symbol(symbol)
+        ):
 
             print(
                 f"{name}: "
@@ -1284,9 +1391,20 @@ def analyze_market(symbol, name):
         # DATA
         # ====================================================
 
-        m5 = prepare_data(symbol, "5m")
-        m15 = prepare_data(symbol, "15m")
-        h1 = prepare_data(symbol, "1h")
+        m5 = prepare_data(
+            symbol,
+            "5m"
+        )
+
+        m15 = prepare_data(
+            symbol,
+            "15m"
+        )
+
+        h1 = prepare_data(
+            symbol,
+            "1h"
+        )
 
         if (
             m5 is None
@@ -1342,13 +1460,16 @@ def analyze_market(symbol, name):
             )
 
         if price is None:
+
             return None
 
         # ====================================================
         # SUPPORT / RESISTANCE
         # ====================================================
 
-        sr = find_support_resistance(close)
+        sr = find_support_resistance(
+            close
+        )
 
         if not sr:
 
@@ -1359,8 +1480,13 @@ def analyze_market(symbol, name):
 
             return None
 
-        support = float(sr["support"])
-        resistance = float(sr["resistance"])
+        support = float(
+            sr["support"]
+        )
+
+        resistance = float(
+            sr["resistance"]
+        )
 
         # ====================================================
         # INDICATORS
@@ -1381,7 +1507,9 @@ def analyze_market(symbol, name):
             14
         )
 
-        macd = ta.trend.MACD(close)
+        macd = ta.trend.MACD(
+            close
+        )
 
         atr = ta.volatility.average_true_range(
             high,
@@ -1397,13 +1525,40 @@ def analyze_market(symbol, name):
             14
         )
 
-        e50 = safe_float(ema50, -2)
-        e200 = safe_float(ema200, -2)
-        r = safe_float(rsi, -2)
-        m = safe_float(macd.macd(), -2)
-        ms = safe_float(macd.macd_signal(), -2)
-        atr_value = safe_float(atr, -2)
-        adx_value = safe_float(adx.adx(), -2)
+        e50 = safe_float(
+            ema50,
+            -2
+        )
+
+        e200 = safe_float(
+            ema200,
+            -2
+        )
+
+        r = safe_float(
+            rsi,
+            -2
+        )
+
+        m = safe_float(
+            macd.macd(),
+            -2
+        )
+
+        ms = safe_float(
+            macd.macd_signal(),
+            -2
+        )
+
+        atr_value = safe_float(
+            atr,
+            -2
+        )
+
+        adx_value = safe_float(
+            adx.adx(),
+            -2
+        )
 
         if any(
             x is None
@@ -1498,9 +1653,12 @@ def analyze_market(symbol, name):
             m15_e50 is None
             or m15_e200 is None
         ):
+
             return None
 
-        m15_bullish = m15_e50 > m15_e200
+        m15_bullish = (
+            m15_e50 > m15_e200
+        )
 
         # ====================================================
         # H1 TREND
@@ -1530,9 +1688,12 @@ def analyze_market(symbol, name):
             h1_e50 is None
             or h1_e200 is None
         ):
+
             return None
 
-        h1_bullish = h1_e50 > h1_e200
+        h1_bullish = (
+            h1_e50 > h1_e200
+        )
 
         # ====================================================
         # VOLUME
@@ -1541,7 +1702,10 @@ def analyze_market(symbol, name):
         v = volume.fillna(0)
 
         current_volume = (
-            safe_float(v, -2)
+            safe_float(
+                v,
+                -2
+            )
             or 0.0
         )
 
@@ -1567,7 +1731,8 @@ def analyze_market(symbol, name):
 
         volume_confirmed = (
             avg_volume > 0
-            and current_volume >= avg_volume * 1.05
+            and current_volume
+            >= avg_volume * 1.05
         )
 
         # ====================================================
@@ -1608,75 +1773,102 @@ def analyze_market(symbol, name):
         sell_score = 0
 
         if ema_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if macd_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if m15_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if h1_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if 45 < r < 70:
+
             buy_score += 10
 
         if 30 < r < 55:
+
             sell_score += 10
 
         if adx_value >= 25:
+
             buy_score += 10
             sell_score += 10
 
         if gainz_v2_buy:
+
             buy_score += GAINZ_V2_BONUS
 
         if gainz_v2_sell:
+
             sell_score += GAINZ_V2_BONUS
 
         if gainz_pro_buy:
+
             buy_score += GAINZ_PRO_BONUS
 
         if gainz_pro_sell:
+
             sell_score += GAINZ_PRO_BONUS
 
         if (
             structure["bullish_bos"]
             or structure["bullish_choch"]
         ):
+
             buy_score += 10
 
         if (
             structure["bearish_bos"]
             or structure["bearish_choch"]
         ):
+
             sell_score += 10
 
         if liquidity["bullish"]:
+
             buy_score += 10
 
         if liquidity["bearish"]:
+
             sell_score += 10
 
         if displacement["bullish"]:
+
             buy_score += 5
 
         if displacement["bearish"]:
+
             sell_score += 5
 
         if fvg["bullish"]:
+
             buy_score += 5
 
         if fvg["bearish"]:
+
             sell_score += 5
 
         # ====================================================
@@ -1689,7 +1881,10 @@ def analyze_market(symbol, name):
         ):
 
             signal = "🟢 BUY"
-            preliminary = min(100, buy_score)
+            preliminary = min(
+                100,
+                buy_score
+            )
 
         elif (
             sell_score >= 70
@@ -1697,7 +1892,10 @@ def analyze_market(symbol, name):
         ):
 
             signal = "🔴 SELL"
-            preliminary = min(100, sell_score)
+            preliminary = min(
+                100,
+                sell_score
+            )
 
         else:
 
@@ -1763,11 +1961,15 @@ def analyze_market(symbol, name):
 
         if signal == "🟢 BUY":
 
-            rsi_valid = 45 < r < 70
+            rsi_valid = (
+                45 < r < 70
+            )
 
         else:
 
-            rsi_valid = 30 < r < 55
+            rsi_valid = (
+                30 < r < 55
+            )
 
         # ====================================================
         # TREND ALIGNMENT
@@ -1802,9 +2004,17 @@ def analyze_market(symbol, name):
                 or structure["bullish_choch"]
             )
 
-            liquidity_confirmed = liquidity["bullish"]
-            fvg_confirmed = fvg["bullish"]
-            displacement_confirmed = displacement["bullish"]
+            liquidity_confirmed = (
+                liquidity["bullish"]
+            )
+
+            fvg_confirmed = (
+                fvg["bullish"]
+            )
+
+            displacement_confirmed = (
+                displacement["bullish"]
+            )
 
         else:
 
@@ -1813,9 +2023,17 @@ def analyze_market(symbol, name):
                 or structure["bearish_choch"]
             )
 
-            liquidity_confirmed = liquidity["bearish"]
-            fvg_confirmed = fvg["bearish"]
-            displacement_confirmed = displacement["bearish"]
+            liquidity_confirmed = (
+                liquidity["bearish"]
+            )
+
+            fvg_confirmed = (
+                fvg["bearish"]
+            )
+
+            displacement_confirmed = (
+                displacement["bearish"]
+            )
 
         # ====================================================
         # TP / SL MULTIPLIERS
@@ -1847,25 +2065,57 @@ def analyze_market(symbol, name):
 
         if signal == "🟢 BUY":
 
-            stop_loss = price - atr_value * sl_mult
-            tp1 = price + atr_value
-            tp2 = price + atr_value * 2
-            tp3 = price + atr_value * tp_mult
+            stop_loss = (
+                price
+                - atr_value * sl_mult
+            )
+
+            tp1 = (
+                price
+                + atr_value
+            )
+
+            tp2 = (
+                price
+                + atr_value * 2
+            )
+
+            tp3 = (
+                price
+                + atr_value * tp_mult
+            )
 
         else:
 
-            stop_loss = price + atr_value * sl_mult
-            tp1 = price - atr_value
-            tp2 = price - atr_value * 2
-            tp3 = price - atr_value * tp_mult
+            stop_loss = (
+                price
+                + atr_value * sl_mult
+            )
 
-        valid_levels, level_reason = validate_trade_levels(
-            signal,
-            price,
-            stop_loss,
-            tp1,
-            tp2,
-            tp3
+            tp1 = (
+                price
+                - atr_value
+            )
+
+            tp2 = (
+                price
+                - atr_value * 2
+            )
+
+            tp3 = (
+                price
+                - atr_value * tp_mult
+            )
+
+        valid_levels, level_reason = (
+            validate_trade_levels(
+                signal,
+                price,
+                stop_loss,
+                tp1,
+                tp2,
+                tp3
+            )
         )
 
         if not valid_levels:
@@ -1906,10 +2156,16 @@ def analyze_market(symbol, name):
             ):
 
                 if signal == "🟢 BUY":
-                    dxy_confirmed = dxy_now < dxy_old
+
+                    dxy_confirmed = (
+                        dxy_now < dxy_old
+                    )
 
                 else:
-                    dxy_confirmed = dxy_now > dxy_old
+
+                    dxy_confirmed = (
+                        dxy_now > dxy_old
+                    )
 
         # ====================================================
         # SMART SCORE
@@ -2035,7 +2291,9 @@ def analyze_market(symbol, name):
             )
 
             filtered_signal = "⚪ WAIT"
-            old_reason = "No-trade filter error"
+            old_reason = (
+                "No-trade filter error"
+            )
 
         if filtered_signal not in [
             "🟢 BUY",
@@ -2054,17 +2312,19 @@ def analyze_market(symbol, name):
         # MASTER V3 HARD FILTER
         # ====================================================
 
-        passed, reason = master_quality_filter(
-            filtered_signal,
-            final_ai_score,
-            quality_score,
-            entry_quality,
-            adx_value,
-            volume_confirmed,
-            trend_aligned,
-            rsi_valid,
-            news_risk,
-            valid_levels
+        passed, reason = (
+            master_quality_filter(
+                filtered_signal,
+                final_ai_score,
+                quality_score,
+                entry_quality,
+                adx_value,
+                volume_confirmed,
+                trend_aligned,
+                rsi_valid,
+                news_risk,
+                valid_levels
+            )
         )
 
         if not passed:
@@ -2086,6 +2346,11 @@ def analyze_market(symbol, name):
             print(
                 f"Smart Score: "
                 f"{smart_score}/100"
+            )
+
+            print(
+                f"Smart Decision: "
+                f"{smart_decision}"
             )
 
             print(
@@ -2119,16 +2384,19 @@ def analyze_market(symbol, name):
         # FINAL TP / SL
         # ====================================================
 
-        final_valid, _ = validate_trade_levels(
-            filtered_signal,
-            price,
-            stop_loss,
-            tp1,
-            tp2,
-            tp3
+        final_valid, _ = (
+            validate_trade_levels(
+                filtered_signal,
+                price,
+                stop_loss,
+                tp1,
+                tp2,
+                tp3
+            )
         )
 
         if not final_valid:
+
             return None
 
         # ====================================================
@@ -2205,13 +2473,22 @@ def analyze_market(symbol, name):
             symbol
         )
 
-        return f"""📊 {name} {direction} NOW {p(price)}
+        return (
+            f"📊 {name} {direction} NOW {p(price)}\n\n"
+            f"⚠️ Stop Loss (SL): {p(stop_loss)}\n\n"
+            f"🎯 TP1: {p(tp1)}\n"
+            f"🎯 TP2: {p(tp2)}\n"
+            f"🎯 TP3: {p(tp3)}"
+        )
 
-⚠️ Stop Loss (SL): {p(stop_loss)}
+    except Exception as e:
 
-🎯 TP1: {p(tp1)}
-🎯 TP2: {p(tp2)}
-🎯 TP3: {p(tp3)}"""
+        print(
+            f"{name}: "
+            f"Fatal analysis error: {e}"
+        )
+
+        return None
 
 
 # ============================================================
