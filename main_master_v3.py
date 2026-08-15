@@ -141,6 +141,7 @@ def format_price(value, symbol):
     """
 
     try:
+
         decimals = get_price_decimals(symbol)
         number = float(value)
 
@@ -150,6 +151,7 @@ def format_price(value, symbol):
         )
 
     except Exception:
+
         return "N/A"
 
 
@@ -175,6 +177,7 @@ def safe_float(series, index=-1):
         return None
 
     except Exception:
+
         return None
 
 
@@ -315,25 +318,33 @@ def prepare_data(symbol, interval="5m"):
             close,
             "columns"
         ):
-            close = close.iloc[:, 0]
+            close = (
+                close.iloc[:, 0]
+            )
 
         if hasattr(
             high,
             "columns"
         ):
-            high = high.iloc[:, 0]
+            high = (
+                high.iloc[:, 0]
+            )
 
         if hasattr(
             low,
             "columns"
         ):
-            low = low.iloc[:, 0]
+            low = (
+                low.iloc[:, 0]
+            )
 
         if hasattr(
             volume,
             "columns"
         ):
-            volume = volume.iloc[:, 0]
+            volume = (
+                volume.iloc[:, 0]
+            )
 
         open_price = (
             open_price.dropna()
@@ -2608,6 +2619,7 @@ def analyze_market(
 
         # ====================================================
         # MESSAGE
+        # SIMPLE TELEGRAM FORMAT
         # ====================================================
 
         direction = (
@@ -2621,274 +2633,13 @@ def analyze_market(
             symbol
         )
 
-        structure_status = (
-            "CONFIRMED"
-            if structure_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        liquidity_status = (
-            "CONFIRMED"
-            if liquidity_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        fvg_status = (
-            "CONFIRMED"
-            if fvg_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        displacement_status = (
-            "CONFIRMED"
-            if displacement_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        dxy_status = (
-            "CONFIRMED"
-            if dxy_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        gainz_v2_status = (
-            "CONFIRMED"
-            if gainz_v2_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        gainz_pro_status = (
-            "CONFIRMED"
-            if gainz_pro_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        reasons = [
-            "Master V3 hard filters passed",
-            "AI Score 80+",
-            "Quality Score 80+",
-            "Entry Quality A",
-            "ADX 25+",
-            "Volume confirmed",
-            "M5/M15/H1 aligned",
-            "RSI valid",
-            "News risk acceptable"
-        ]
-
-        if gainz_v2_confirmed:
-
-            reasons.append(
-                "GainzAlgo V2 confirmation +10"
-            )
-
-        if gainz_pro_confirmed:
-
-            reasons.append(
-                "GainzAlgo Pro confirmation +10"
-            )
-
-        if structure_confirmed:
-
-            reasons.append(
-                "BOS/CHoCH bonus +5"
-            )
-
-        if liquidity_confirmed:
-
-            reasons.append(
-                "Liquidity Sweep bonus +5"
-            )
-
-        if fvg_confirmed:
-
-            reasons.append(
-                "FVG bonus +5"
-            )
-
-        if displacement_confirmed:
-
-            reasons.append(
-                "Displacement bonus +5"
-            )
-
-        if dxy_confirmed:
-
-            reasons.append(
-                "DXY confirmation bonus +5"
-            )
-
-        reasons_text = "\n".join(
-            "✅ " + x
-            for x in reasons
-        )
-
-        volume_status = (
-            "CONFIRMED"
-            if volume_confirmed
-            else "LOW"
-        )
-
-        v2_buy_status = (
-            "YES"
-            if gainz_v2_buy
-            else "NO"
-        )
-
-        v2_sell_status = (
-            "YES"
-            if gainz_v2_sell
-            else "NO"
-        )
-
-        pro_buy_status = (
-            "YES"
-            if gainz_pro_buy
-            else "NO"
-        )
-
-        pro_sell_status = (
-            "YES"
-            if gainz_pro_sell
-            else "NO"
-        )
-
-        return f"""
-📊 {name} {direction} NOW {p(price)}
+        return f"""📊 {name} {direction} NOW {p(price)}
 
 ⚠️ Stop Loss (SL): {p(stop_loss)}
 
 🎯 TP1: {p(tp1)}
 🎯 TP2: {p(tp2)}
-🎯 TP3: {p(tp3)}
-
-━━━━━━━━━━━━━━━━━━━━
-
-🥇 QuantumGold AI Signal
-MASTER FILTER V3
-
-{name}
-
-Signal: {filtered_signal}
-
-Confidence: {final_ai_score}%
-
-Live Price: {p(price)}
-
-Stop Loss: {p(stop_loss)}
-
-Take Profit: {p(tp3)}
-
-━━━━━━━━━━━━━━━━━━━━
-
-Entry Quality:
-{entry_quality}
-
-AI Score:
-{final_ai_score}/100
-
-Smart Score:
-{smart_score}/100
-
-Quality Score:
-{quality_score}/100
-
-Decision:
-{smart_decision}
-
-Master Filter:
-{reason}
-
-━━━━━━━━━━━━━━━━━━━━
-
-ADX:
-{adx_value:.2f}
-
-RSI:
-{r:.2f}
-
-MACD:
-{m:.6f}
-
-ATR:
-{atr_value:.6f}
-
-Volume:
-{volume_status}
-
-━━━━━━━━━━━━━━━━━━━━
-
-GAINZALGO CONFIRMATION
-
-GainzAlgo V2 Essential:
-{gainz_v2_status}
-
-GainzAlgo Pro:
-{gainz_pro_status}
-
-V2 BUY:
-{v2_buy_status}
-
-V2 SELL:
-{v2_sell_status}
-
-Pro BUY:
-{pro_buy_status}
-
-Pro SELL:
-{pro_sell_status}
-
-━━━━━━━━━━━━━━━━━━━━
-
-Smart Money Confluence
-
-BOS / CHoCH:
-{structure_status}
-
-Liquidity Sweep:
-{liquidity_status}
-
-FVG:
-{fvg_status}
-
-Displacement:
-{displacement_status}
-
-DXY:
-{dxy_status}
-
-━━━━━━━━━━━━━━━━━━━━
-
-News Risk:
-{news_risk}
-
-Risk / Reward:
-{level_reason}
-
-Target Win Rate:
-{TARGET_WIN_RATE}%
-(design target, not guaranteed)
-
-Support:
-{p(support)}
-
-Resistance:
-{p(resistance)}
-
-━━━━━━━━━━━━━━━━━━━━
-
-Reasons:
-
-{reasons_text}
-
-━━━━━━━━━━━━━━━━━━━━
-
-Timeframe:
-M5 Entry
-M15 Confirmation
-H1 Major Trend
-
-QuantumGold MASTER FILTER V3
-"""
+🎯 TP3: {p(tp3)}"""
 
     except Exception as e:
 
