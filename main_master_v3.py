@@ -8,7 +8,6 @@ import ta
 from telegram import Bot
 
 from news_filter import check_news
-from daily_report import save_signal, get_report
 from signal_memory import allow_new_signal
 from trade_memory import save_trade, save_last_signal
 from live_price import get_live_gold_price
@@ -42,6 +41,9 @@ from no_trade_filter import apply_no_trade_filter
 #
 # GainzAlgo V2 + Pro
 # Smart Money = SOFT / BONUS
+#
+# DAILY REPORT:
+#   DISABLED
 # ============================================================
 
 
@@ -2513,16 +2515,6 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # CRYPTO NO-TRADE OVERRIDE
-        #
-        # Crypto HIGH news is intentionally SOFT.
-        # The no-trade module may still return WAIT
-        # because it sees MEDIUM/HIGH risk.
-        #
-        # We do NOT bypass AI / Quality / Trend / RSI /
-        # TP-SL / Master V3.
-        #
-        # Only the global HIGH-news block is relaxed for
-        # Crypto because it was already converted to MEDIUM.
         # ====================================================
 
         if filtered_signal not in [
@@ -2707,10 +2699,6 @@ def analyze_market(symbol, name):
                 tp3
             )
 
-            save_signal(
-                filtered_signal
-            )
-
         except Exception as e:
 
             print(
@@ -2809,6 +2797,11 @@ async def main():
     print(
         "Crypto signal delivery: "
         "ENABLED"
+    )
+
+    print(
+        "Daily Report: "
+        "DISABLED"
     )
 
     print(
@@ -2938,120 +2931,6 @@ async def main():
                 f"Unexpected analysis error: "
                 f"{e}"
             )
-
-    # ========================================================
-    # DAILY REPORT
-    # ========================================================
-
-    try:
-
-        report = get_report()
-
-        report_text = f"""
-📊 QuantumGold AI Daily Report
-
-Total Signals:
-{report["total"]}
-
-🟢 BUY:
-{report["buy"]}
-
-🔴 SELL:
-{report["sell"]}
-
-━━━━━━━━━━━━━━━━━━━━
-
-Mode:
-MASTER FILTER V3
-
-Minimum AI:
-{MIN_AI_SCORE}
-
-Minimum Quality:
-{MIN_QUALITY_SCORE}
-
-ADX Gold/Forex:
-{MIN_ADX}
-
-ADX Crypto:
-{MIN_CRYPTO_ADX}
-
-Design Target:
-{TARGET_WIN_RATE}%
-
-━━━━━━━━━━━━━━━━━━━━
-
-GainzAlgo V2:
-ENABLED
-
-GainzAlgo Pro:
-ENABLED
-
-V2 Bonus:
-+{GAINZ_V2_BONUS}
-
-Pro Bonus:
-+{GAINZ_PRO_BONUS}
-
-━━━━━━━━━━━━━━━━━━━━
-
-Smart Money:
-SOFT BONUS
-
-BOS/CHoCH:
-+5
-
-Liquidity:
-+5
-
-FVG:
-+5
-
-Displacement:
-+5
-
-DXY:
-+5 for Gold
-
-━━━━━━━━━━━━━━━━━━━━
-
-News Policy:
-
-Gold + Forex:
-HIGH NEWS = HARD REJECT
-
-Crypto:
-HIGH NEWS = SOFT RISK
-
-━━━━━━━━━━━━━━━━━━━━
-
-Volume Policy:
-
-Gold + Forex:
-HARD FILTER
-
-Crypto:
-SOFT CONFIRMATION
-
-━━━━━━━━━━━━━━━━━━━━
-
-Gold + Forex:
-WEEKDAYS ONLY
-
-Crypto:
-ENABLED 24/7
-"""
-
-        await bot.send_message(
-            chat_id=CHAT_ID,
-            text=report_text
-        )
-
-    except Exception as e:
-
-        print(
-            f"Report error: {e}"
-        )
 
 
 # ============================================================
