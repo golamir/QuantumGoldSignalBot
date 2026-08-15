@@ -23,15 +23,25 @@ from no_trade_filter import apply_no_trade_filter
 # MASTER FILTER V3
 #
 # Gold + Forex + Crypto
-# Crypto = 24/7
-# Gold + Forex = Monday-Friday
+#
+# Gold + Forex:
+#   Monday-Friday
+#   AI >= 80
+#   Quality >= 80
+#   ADX >= 25
+#   Volume = HARD
+#   HIGH NEWS = HARD REJECT
+#
+# Crypto:
+#   24/7
+#   AI >= 80
+#   Quality >= 80
+#   ADX >= 20
+#   Volume = SOFT
+#   HIGH NEWS = SOFT -> MEDIUM
 #
 # GainzAlgo V2 + Pro
 # Smart Money = SOFT / BONUS
-#
-# NEWS POLICY:
-# Gold + Forex = HIGH NEWS = HARD REJECT
-# Crypto = HIGH NEWS = SOFT RISK
 # ============================================================
 
 
@@ -40,12 +50,17 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 # ============================================================
-# HARD FILTERS
+# MASTER HARD FILTERS
 # ============================================================
 
 MIN_AI_SCORE = 80
 MIN_QUALITY_SCORE = 80
+
+# Gold / Forex
 MIN_ADX = 25
+
+# Crypto
+MIN_CRYPTO_ADX = 20
 
 TARGET_WIN_RATE = 85
 
@@ -125,88 +140,12 @@ def is_crypto_symbol(symbol):
 
 
 # ============================================================
-# NEWS POLICY
+# MARKET TYPE
 # ============================================================
 
-def get_market_news_risk(symbol, name):
+def is_crypto_market(symbol):
 
-    """
-    News policy for MASTER FILTER V3.
-
-    Gold + Forex:
-        HIGH = HARD REJECT
-
-    Crypto:
-        News remains monitored.
-        HIGH news is converted to MEDIUM for the
-        downstream hard filter so that global
-        Forex/Gold news does not automatically kill
-        Crypto signals.
-
-    If the news module itself later supports
-    symbol-specific crypto news, this function can
-    be upgraded without changing the rest of V3.
-    """
-
-    try:
-
-        news = check_news() or {
-            "risk": "HIGH"
-        }
-
-        raw_risk = str(
-            news.get(
-                "risk",
-                "HIGH"
-            )
-        ).upper().strip()
-
-        if raw_risk not in [
-            "LOW",
-            "MEDIUM",
-            "HIGH"
-        ]:
-
-            raw_risk = "HIGH"
-
-        # ----------------------------------------------------
-        # CRYPTO NEWS IS SOFT
-        # ----------------------------------------------------
-
-        if is_crypto_symbol(symbol):
-
-            if raw_risk == "HIGH":
-
-                print(
-                    f"{name}: "
-                    f"Global news risk HIGH -> "
-                    f"Crypto news treated as SOFT/MEDIUM"
-                )
-
-                return "MEDIUM"
-
-            return raw_risk
-
-        # ----------------------------------------------------
-        # GOLD + FOREX NEWS REMAINS HARD
-        # ----------------------------------------------------
-
-        return raw_risk
-
-    except Exception as e:
-
-        print(
-            f"{name}: News error: {e}"
-        )
-
-        # Fail-safe:
-        # Gold/Forex = HIGH
-        # Crypto = MEDIUM
-        if is_crypto_symbol(symbol):
-
-            return "MEDIUM"
-
-        return "HIGH"
+    return is_crypto_symbol(symbol)
 
 
 # ============================================================
@@ -923,8 +862,7 @@ def detect_gainzalgo_v2(
         )
 
         rsi_sell = (
-            rsi_value
-            > 100 - GAINZ_V2_RSI
+            rsi_value > 100 - GAINZ_V2_RSI
         )
 
         close_delta = float(
@@ -1041,15 +979,11 @@ def detect_gainzalgo_pro(
         )
 
         tr1 = current_high - current_low
-
         tr2 = abs(
-            current_high
-            - previous_close
+            current_high - previous_close
         )
-
         tr3 = abs(
-            current_low
-            - previous_close
+            current_low - previous_close
         )
 
         true_range = max(
@@ -1098,8 +1032,7 @@ def detect_gainzalgo_pro(
         )
 
         rsi_sell = (
-            rsi_value
-            > 100 - GAINZ_PRO_RSI
+            rsi_value > 100 - GAINZ_PRO_RSI
         )
 
         close_delta = float(
@@ -1282,7 +1215,6 @@ def calculate_quality_score(
         or
         (sell and not ema_bullish)
     ):
-
         score += 15
 
     if (
@@ -1290,7 +1222,6 @@ def calculate_quality_score(
         or
         (sell and not macd_bullish)
     ):
-
         score += 15
 
     if (
@@ -1298,7 +1229,6 @@ def calculate_quality_score(
         or
         (sell and not m15_bullish)
     ):
-
         score += 10
 
     if (
@@ -1306,7 +1236,6 @@ def calculate_quality_score(
         or
         (sell and not h1_bullish)
     ):
-
         score += 10
 
     if adx_value >= 30:
@@ -1344,15 +1273,6 @@ def calculate_quality_score(
         elif 25 < rsi_value < 60:
 
             score += 5
-
-    # --------------------------------------------------------
-    # NEWS
-    #
-    # Crypto HIGH news is converted to MEDIUM before reaching
-    # this function, therefore Crypto news remains a soft risk.
-    #
-    # Gold/Forex HIGH still receives -20.
-    # --------------------------------------------------------
 
     if news_risk == "HIGH":
 
@@ -1440,11 +1360,19 @@ def master_quality_filter(
 
         return False, "No clear signal"
 
+    # --------------------------------------------------------
+    # AI
+    # --------------------------------------------------------
+
     if ai_score < MIN_AI_SCORE:
 
         return False, (
             f"AI Score below {MIN_AI_SCORE}"
         )
+
+    # --------------------------------------------------------
+    # QUALITY
+    # --------------------------------------------------------
 
     if quality_score < MIN_QUALITY_SCORE:
 
@@ -1452,29 +1380,60 @@ def master_quality_filter(
             f"Quality below {MIN_QUALITY_SCORE}"
         )
 
+    # --------------------------------------------------------
+    # ENTRY
+    # --------------------------------------------------------
+
     if entry_quality != "A":
 
         return False, (
             f"Entry Quality {entry_quality}"
         )
 
-    if adx_value < MIN_ADX:
+    # --------------------------------------------------------
+    # ADX
+    # --------------------------------------------------------
+
+    required_adx = (
+        MIN_CRYPTO_ADX
+        if crypto
+        else MIN_ADX
+    )
+
+    if adx_value < required_adx:
 
         return False, (
-            f"ADX below {MIN_ADX}"
+            f"ADX below {required_adx}"
         )
 
-    if not volume_confirmed:
+    # --------------------------------------------------------
+    # VOLUME
+    # --------------------------------------------------------
 
-        return False, (
-            "Volume confirmation missing"
-        )
+    if not crypto:
+
+        if not volume_confirmed:
+
+            return False, (
+                "Volume confirmation missing"
+            )
+
+    # Crypto volume is SOFT
+    # It does not reject a high quality setup.
+
+    # --------------------------------------------------------
+    # TREND
+    # --------------------------------------------------------
 
     if not trend_aligned:
 
         return False, (
             "M5/M15/H1 trend conflict"
         )
+
+    # --------------------------------------------------------
+    # RSI
+    # --------------------------------------------------------
 
     if not rsi_valid:
 
@@ -1484,24 +1443,22 @@ def master_quality_filter(
 
     # --------------------------------------------------------
     # NEWS
-    #
-    # Gold + Forex:
-    # HIGH = HARD REJECT
-    #
-    # Crypto:
-    # HIGH has already been converted to MEDIUM by
-    # get_market_news_risk(), therefore it will not reach
-    # this rejection condition.
     # --------------------------------------------------------
 
-    if (
-        news_risk == "HIGH"
-        and not crypto
-    ):
+    if news_risk == "HIGH":
 
-        return False, (
-            "HIGH news risk"
-        )
+        if not crypto:
+
+            return False, (
+                "HIGH news risk"
+            )
+
+        # Crypto HIGH news has already been
+        # converted to MEDIUM before this point.
+
+    # --------------------------------------------------------
+    # TP / SL
+    # --------------------------------------------------------
 
     if not tp_sl_valid:
 
@@ -1528,13 +1485,15 @@ def analyze_market(symbol, name):
             f"{'=' * 60}"
         )
 
+        crypto = is_crypto_market(symbol)
+
         # ====================================================
         # WEEKEND FILTER
         # ====================================================
 
         if (
             is_weekend()
-            and not is_crypto_symbol(symbol)
+            and not crypto
         ):
 
             print(
@@ -1548,16 +1507,63 @@ def analyze_market(symbol, name):
         # NEWS
         # ====================================================
 
-        news_risk = get_market_news_risk(
-            symbol,
-            name
-        )
+        try:
 
-        print(
-            f"{name}: "
-            f"Effective News Risk = "
-            f"{news_risk}"
-        )
+            news = check_news() or {
+                "risk": "HIGH"
+            }
+
+            raw_news_risk = str(
+                news.get(
+                    "risk",
+                    "HIGH"
+                )
+            ).upper()
+
+        except Exception as e:
+
+            print(
+                f"{name}: News error: {e}"
+            )
+
+            raw_news_risk = "HIGH"
+
+        # ----------------------------------------------------
+        # Crypto News Policy
+        # ----------------------------------------------------
+
+        if crypto:
+
+            if raw_news_risk == "HIGH":
+
+                print(
+                    f"{name}: "
+                    f"Global news risk HIGH "
+                    f"-> Crypto news treated "
+                    f"as SOFT/MEDIUM"
+                )
+
+                news_risk = "MEDIUM"
+
+            else:
+
+                news_risk = raw_news_risk
+
+            print(
+                f"{name}: "
+                f"Effective News Risk = "
+                f"{news_risk}"
+            )
+
+        else:
+
+            news_risk = raw_news_risk
+
+            print(
+                f"{name}: "
+                f"Effective News Risk = "
+                f"{news_risk}"
+            )
 
         # ====================================================
         # DATA
@@ -1590,6 +1596,10 @@ def analyze_market(symbol, name):
 
             return None
 
+        # ====================================================
+        # DXY
+        # ====================================================
+
         dxy = None
 
         if symbol == "GC=F":
@@ -1600,7 +1610,7 @@ def analyze_market(symbol, name):
             )
 
         # ====================================================
-        # M5
+        # M5 DATA
         # ====================================================
 
         open_price = m5["open"]
@@ -1907,6 +1917,24 @@ def analyze_market(symbol, name):
             >= avg_volume * 1.05
         )
 
+        if crypto:
+
+            print(
+                f"{name}: "
+                f"Volume confirmation="
+                f"{volume_confirmed} "
+                f"(SOFT for Crypto)"
+            )
+
+        else:
+
+            print(
+                f"{name}: "
+                f"Volume confirmation="
+                f"{volume_confirmed} "
+                f"(HARD)"
+            )
+
         # ====================================================
         # SMART MONEY
         # ====================================================
@@ -2095,13 +2123,23 @@ def analyze_market(symbol, name):
 
         if signal == "🟢 BUY":
 
-            gainz_v2_confirmed = gainz_v2_buy
-            gainz_pro_confirmed = gainz_pro_buy
+            gainz_v2_confirmed = (
+                gainz_v2_buy
+            )
+
+            gainz_pro_confirmed = (
+                gainz_pro_buy
+            )
 
         else:
 
-            gainz_v2_confirmed = gainz_v2_sell
-            gainz_pro_confirmed = gainz_pro_sell
+            gainz_v2_confirmed = (
+                gainz_v2_sell
+            )
+
+            gainz_pro_confirmed = (
+                gainz_pro_sell
+            )
 
         # ====================================================
         # ENTRY
@@ -2218,12 +2256,7 @@ def analyze_market(symbol, name):
             sl_mult = 2.0
             tp_mult = 3.0
 
-        elif symbol in [
-            "BTC-USD",
-            "ETH-USD",
-            "SOL-USD",
-            "BNB-USD"
-        ]:
+        elif crypto:
 
             sl_mult = 3.0
             tp_mult = 5.0
@@ -2478,6 +2511,20 @@ def analyze_market(symbol, name):
                 "No-trade filter error"
             )
 
+        # ====================================================
+        # CRYPTO NO-TRADE OVERRIDE
+        #
+        # Crypto HIGH news is intentionally SOFT.
+        # The no-trade module may still return WAIT
+        # because it sees MEDIUM/HIGH risk.
+        #
+        # We do NOT bypass AI / Quality / Trend / RSI /
+        # TP-SL / Master V3.
+        #
+        # Only the global HIGH-news block is relaxed for
+        # Crypto because it was already converted to MEDIUM.
+        # ====================================================
+
         if filtered_signal not in [
             "🟢 BUY",
             "🔴 SELL"
@@ -2507,7 +2554,7 @@ def analyze_market(symbol, name):
                 rsi_valid,
                 news_risk,
                 valid_levels,
-                crypto=is_crypto_symbol(symbol)
+                crypto=crypto
             )
         )
 
@@ -2542,9 +2589,33 @@ def analyze_market(symbol, name):
                 f"{adx_value:.2f}"
             )
 
+            if crypto:
+
+                print(
+                    f"Required Crypto ADX: "
+                    f"{MIN_CRYPTO_ADX}"
+                )
+
+            else:
+
+                print(
+                    f"Required ADX: "
+                    f"{MIN_ADX}"
+                )
+
             print(
                 f"Entry: "
                 f"{entry_quality}"
+            )
+
+            print(
+                f"Volume: "
+                f"{volume_confirmed}"
+            )
+
+            print(
+                f"Volume Policy: "
+                f"{'SOFT' if crypto else 'HARD'}"
             )
 
             print(
@@ -2663,10 +2734,10 @@ def analyze_market(symbol, name):
         )
 
         return (
-            f"📊 {name} {direction} NOW {p(price)}\n\n"
-            f"⚠️ Stop Loss (SL): {p(stop_loss)}\n\n"
-            f"🎯 TP1: {p(tp1)}\n"
-            f"🎯 TP2: {p(tp2)}\n"
+            f"📊 {name} {direction} NOW {p(price)}\n"
+            f"⚠️ Stop Loss (SL): {p(stop_loss)}\n"
+            f"🎯 TP1: {p(tp1)} "
+            f"🎯 TP2: {p(tp2)} "
             f"🎯 TP3: {p(tp3)}"
         )
 
@@ -2704,8 +2775,13 @@ async def main():
     )
 
     print(
-        f"Minimum ADX: "
+        f"Minimum ADX Gold/Forex: "
         f"{MIN_ADX}"
+    )
+
+    print(
+        f"Minimum ADX Crypto: "
+        f"{MIN_CRYPTO_ADX}"
     )
 
     print(
@@ -2894,8 +2970,11 @@ Minimum AI:
 Minimum Quality:
 {MIN_QUALITY_SCORE}
 
-Minimum ADX:
+ADX Gold/Forex:
 {MIN_ADX}
+
+ADX Crypto:
+{MIN_CRYPTO_ADX}
 
 Design Target:
 {TARGET_WIN_RATE}%
@@ -2943,6 +3022,16 @@ HIGH NEWS = HARD REJECT
 
 Crypto:
 HIGH NEWS = SOFT RISK
+
+━━━━━━━━━━━━━━━━━━━━
+
+Volume Policy:
+
+Gold + Forex:
+HARD FILTER
+
+Crypto:
+SOFT CONFIRMATION
 
 ━━━━━━━━━━━━━━━━━━━━
 
