@@ -8,6 +8,7 @@ import ta
 from telegram import Bot
 
 from news_filter import check_news
+from daily_report import save_signal
 from signal_memory import allow_new_signal
 from trade_memory import save_trade, save_last_signal
 from live_price import get_live_gold_price
@@ -42,7 +43,7 @@ from no_trade_filter import apply_no_trade_filter
 # GainzAlgo V2 + Pro
 # Smart Money = SOFT / BONUS
 #
-# DAILY REPORT:
+# Daily Report:
 #   DISABLED
 # ============================================================
 
@@ -1362,40 +1363,28 @@ def master_quality_filter(
 
         return False, "No clear signal"
 
-    # --------------------------------------------------------
     # AI
-    # --------------------------------------------------------
-
     if ai_score < MIN_AI_SCORE:
 
         return False, (
             f"AI Score below {MIN_AI_SCORE}"
         )
 
-    # --------------------------------------------------------
     # QUALITY
-    # --------------------------------------------------------
-
     if quality_score < MIN_QUALITY_SCORE:
 
         return False, (
             f"Quality below {MIN_QUALITY_SCORE}"
         )
 
-    # --------------------------------------------------------
     # ENTRY
-    # --------------------------------------------------------
-
     if entry_quality != "A":
 
         return False, (
             f"Entry Quality {entry_quality}"
         )
 
-    # --------------------------------------------------------
     # ADX
-    # --------------------------------------------------------
-
     required_adx = (
         MIN_CRYPTO_ADX
         if crypto
@@ -1408,10 +1397,7 @@ def master_quality_filter(
             f"ADX below {required_adx}"
         )
 
-    # --------------------------------------------------------
     # VOLUME
-    # --------------------------------------------------------
-
     if not crypto:
 
         if not volume_confirmed:
@@ -1420,33 +1406,21 @@ def master_quality_filter(
                 "Volume confirmation missing"
             )
 
-    # Crypto volume is SOFT
-    # It does not reject a high quality setup.
-
-    # --------------------------------------------------------
     # TREND
-    # --------------------------------------------------------
-
     if not trend_aligned:
 
         return False, (
             "M5/M15/H1 trend conflict"
         )
 
-    # --------------------------------------------------------
     # RSI
-    # --------------------------------------------------------
-
     if not rsi_valid:
 
         return False, (
             "RSI not valid"
         )
 
-    # --------------------------------------------------------
     # NEWS
-    # --------------------------------------------------------
-
     if news_risk == "HIGH":
 
         if not crypto:
@@ -1455,13 +1429,7 @@ def master_quality_filter(
                 "HIGH news risk"
             )
 
-        # Crypto HIGH news has already been
-        # converted to MEDIUM before this point.
-
-    # --------------------------------------------------------
     # TP / SL
-    # --------------------------------------------------------
-
     if not tp_sl_valid:
 
         return False, (
@@ -1529,10 +1497,6 @@ def analyze_market(symbol, name):
             )
 
             raw_news_risk = "HIGH"
-
-        # ----------------------------------------------------
-        # Crypto News Policy
-        # ----------------------------------------------------
 
         if crypto:
 
@@ -2514,7 +2478,7 @@ def analyze_market(symbol, name):
             )
 
         # ====================================================
-        # CRYPTO NO-TRADE OVERRIDE
+        # NO TRADE RESULT
         # ====================================================
 
         if filtered_signal not in [
@@ -2699,6 +2663,10 @@ def analyze_market(symbol, name):
                 tp3
             )
 
+            save_signal(
+                filtered_signal
+            )
+
         except Exception as e:
 
             print(
@@ -2708,6 +2676,7 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # TELEGRAM MESSAGE
+        # FINAL CLEAN SIGNAL FORMAT
         # ====================================================
 
         direction = (
@@ -2721,11 +2690,20 @@ def analyze_market(symbol, name):
             symbol
         )
 
+        if direction == "BUY":
+
+            direction_display = "🔵 BUY"
+
+        else:
+
+            direction_display = "🔴 SELL"
+
         return (
-            f"📊 {name} {direction} NOW {p(price)}\n"
+            f"📊 <b>{name}</b> "
+            f"{direction_display} NOW {p(price)}\n\n"
             f"⚠️ Stop Loss (SL): {p(stop_loss)}\n"
-            f"🎯 TP1: {p(tp1)} "
-            f"🎯 TP2: {p(tp2)} "
+            f"🎯 TP1: {p(tp1)}\n"
+            f"🎯 TP2: {p(tp2)}\n"
             f"🎯 TP3: {p(tp3)}"
         )
 
@@ -2909,7 +2887,8 @@ async def main():
 
                     await bot.send_message(
                         chat_id=CHAT_ID,
-                        text=result
+                        text=result,
+                        parse_mode="HTML"
                     )
 
                     print(
