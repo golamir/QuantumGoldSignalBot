@@ -24,27 +24,12 @@ from no_trade_filter import apply_no_trade_filter
 #
 # Gold + Forex + Crypto
 #
-# Gold + Forex:
-#   Monday-Friday
-#   AI >= 80
-#   Quality >= 80
-#   ADX >= 25
-#   Volume = HARD
-#   HIGH NEWS = HARD REJECT
+# LIVE PRICE PROTECTION:
+#   - No old candle price used as final NOW price
+#   - Live 1m price refreshed before Telegram
+#   - SL / TP rebuilt from final live price
+#   - Signal rejected if final live price unavailable
 #
-# Crypto:
-#   24/7
-#   AI >= 80
-#   Quality >= 80
-#   ADX >= 20
-#   Volume = SOFT
-#   HIGH NEWS = SOFT -> MEDIUM
-#
-# GainzAlgo V2 + Pro
-# Smart Money = SOFT / BONUS
-#
-# Daily Report:
-#   DISABLED
 # ============================================================
 
 
@@ -331,6 +316,155 @@ def get_data(symbol, interval="5m"):
 
         return None
 
+
+# ============================================================
+# LIVE MARKET PRICE
+#
+# IMPORTANT:
+# This function is used only for the CURRENT market price.
+# It is NOT used as an indicator candle.
+# ============================================================
+
+def get_live_market_price(symbol):
+
+    try:
+
+        print(
+            f"{symbol}: "
+            f"Fetching LIVE 1m price..."
+        )
+
+        ticker = yf.Ticker(symbol)
+
+        data = ticker.history(
+            period="1d",
+            interval="1m",
+            auto_adjust=False
+        )
+
+        if (
+            data is not None
+            and not data.empty
+        ):
+
+            if "Close" in data.columns:
+
+                data = data.dropna(
+                    subset=["Close"]
+                )
+
+                if not data.empty:
+
+                    live_price = float(
+                        data["Close"].iloc[-1]
+                    )
+
+                    if is_valid_number(
+                        live_price
+                    ):
+
+                        print(
+                            f"{symbol}: "
+                            f"LIVE 1m PRICE = "
+                            f"{live_price}"
+                        )
+
+                        return live_price
+
+        print(
+            f"{symbol}: "
+            f"LIVE 1m price unavailable"
+        )
+
+    except Exception as e:
+
+        print(
+            f"{symbol}: "
+            f"LIVE price error: {e}"
+        )
+
+    return None
+
+
+# ============================================================
+# FINAL LIVE PRICE
+#
+# Gold:
+#   Try Yahoo 1m first.
+#   Dedicated gold API is secondary fallback.
+#
+# Forex/Crypto:
+#   Yahoo 1m only.
+#
+# NEVER use old candle price here.
+# ============================================================
+
+def get_final_live_price(symbol):
+
+    # --------------------------------------------------------
+    # First source: Yahoo Finance 1m
+    # --------------------------------------------------------
+
+    live_price = get_live_market_price(
+        symbol
+    )
+
+    if (
+        live_price is not None
+        and is_valid_number(live_price)
+    ):
+
+        return float(live_price)
+
+    # --------------------------------------------------------
+    # Gold secondary source
+    # --------------------------------------------------------
+
+    if symbol == "GC=F":
+
+        try:
+
+            gold_price = get_live_gold_price()
+
+            if is_valid_number(
+                gold_price
+            ):
+
+                gold_price = float(
+                    gold_price
+                )
+
+                print(
+                    f"{symbol}: "
+                    f"Dedicated LIVE GOLD "
+                    f"price = {gold_price}"
+                )
+
+                return gold_price
+
+        except Exception as e:
+
+            print(
+                f"{symbol}: "
+                f"Dedicated gold live "
+                f"price error: {e}"
+            )
+
+    # --------------------------------------------------------
+    # NO OLD PRICE FALLBACK
+    # --------------------------------------------------------
+
+    print(
+        f"{symbol}: "
+        f"NO LIVE PRICE AVAILABLE"
+    )
+
+    return None
+
+
+# ============================================================
+# PREPARE DATA
+# ============================================================
 
 def prepare_data(symbol, interval="5m"):
 
@@ -1363,28 +1497,24 @@ def master_quality_filter(
 
         return False, "No clear signal"
 
-    # AI
     if ai_score < MIN_AI_SCORE:
 
         return False, (
             f"AI Score below {MIN_AI_SCORE}"
         )
 
-    # QUALITY
     if quality_score < MIN_QUALITY_SCORE:
 
         return False, (
             f"Quality below {MIN_QUALITY_SCORE}"
         )
 
-    # ENTRY
     if entry_quality != "A":
 
         return False, (
             f"Entry Quality {entry_quality}"
         )
 
-    # ADX
     required_adx = (
         MIN_CRYPTO_ADX
         if crypto
@@ -1397,7 +1527,6 @@ def master_quality_filter(
             f"ADX below {required_adx}"
         )
 
-    # VOLUME
     if not crypto:
 
         if not volume_confirmed:
@@ -1406,21 +1535,18 @@ def master_quality_filter(
                 "Volume confirmation missing"
             )
 
-    # TREND
     if not trend_aligned:
 
         return False, (
             "M5/M15/H1 trend conflict"
         )
 
-    # RSI
     if not rsi_valid:
 
         return False, (
             "RSI not valid"
         )
 
-    # NEWS
     if news_risk == "HIGH":
 
         if not crypto:
@@ -1429,7 +1555,6 @@ def master_quality_filter(
                 "HIGH news risk"
             )
 
-    # TP / SL
     if not tp_sl_valid:
 
         return False, (
@@ -1586,30 +1711,33 @@ def analyze_market(symbol, name):
         volume = m5["volume"]
 
         # ====================================================
-        # PRICE
+        # INITIAL LIVE PRICE
+        #
+        # This is only the first live-price snapshot.
+        # Final price is refreshed again before sending.
         # ====================================================
 
-        if symbol == "GC=F":
-
-            price = get_live_gold_price()
-
-        else:
-
-            price = None
+        price = get_final_live_price(
+            symbol
+        )
 
         if (
             price is None
             or not is_valid_number(price)
         ):
 
-            price = safe_float(
-                close,
-                -2
+            print(
+                f"{name}: "
+                f"NO INITIAL LIVE PRICE "
+                f"-> SIGNAL REJECTED"
             )
 
-        if price is None:
-
             return None
+
+        print(
+            f"{name}: "
+            f"Initial LIVE price = {price}"
+        )
 
         # ====================================================
         # SUPPORT / RESISTANCE
@@ -2233,7 +2361,7 @@ def analyze_market(symbol, name):
             tp_mult = 3.0
 
         # ====================================================
-        # TP / SL
+        # INITIAL TP / SL
         # ====================================================
 
         if signal == "🟢 BUY":
@@ -2597,10 +2725,101 @@ def analyze_market(symbol, name):
             return None
 
         # ====================================================
-        # FINAL TP / SL
+        # FINAL LIVE PRICE REFRESH
+        #
+        # THIS IS THE CRITICAL FIX.
+        #
+        # The signal can take time to reach this point.
+        # Therefore we get a NEW LIVE PRICE immediately
+        # before duplicate checking, saving and Telegram.
+        #
+        # NEVER use old candle price as fallback here.
         # ====================================================
 
-        final_valid, _ = (
+        old_price = price
+
+        final_live_price = get_final_live_price(
+            symbol
+        )
+
+        if (
+            final_live_price is None
+            or not is_valid_number(
+                final_live_price
+            )
+        ):
+
+            print(
+                f"{name}: "
+                f"FINAL LIVE PRICE unavailable "
+                f"-> SIGNAL NOT SENT"
+            )
+
+            return None
+
+        price = float(
+            final_live_price
+        )
+
+        print(
+            f"{name}: "
+            f"FINAL PRICE REFRESH "
+            f"{old_price} -> {price}"
+        )
+
+        # ====================================================
+        # REBUILD TP / SL FROM FINAL LIVE PRICE
+        # ====================================================
+
+        if filtered_signal == "🟢 BUY":
+
+            stop_loss = (
+                price
+                - atr_value * sl_mult
+            )
+
+            tp1 = (
+                price
+                + atr_value
+            )
+
+            tp2 = (
+                price
+                + atr_value * 2
+            )
+
+            tp3 = (
+                price
+                + atr_value * tp_mult
+            )
+
+        else:
+
+            stop_loss = (
+                price
+                + atr_value * sl_mult
+            )
+
+            tp1 = (
+                price
+                - atr_value
+            )
+
+            tp2 = (
+                price
+                - atr_value * 2
+            )
+
+            tp3 = (
+                price
+                - atr_value * tp_mult
+            )
+
+        # ====================================================
+        # FINAL LIVE TP / SL VALIDATION
+        # ====================================================
+
+        final_live_valid, final_live_reason = (
             validate_trade_levels(
                 filtered_signal,
                 price,
@@ -2611,12 +2830,51 @@ def analyze_market(symbol, name):
             )
         )
 
-        if not final_valid:
+        if not final_live_valid:
+
+            print(
+                f"{name}: "
+                f"FINAL LIVE TP/SL REJECTED - "
+                f"{final_live_reason}"
+            )
 
             return None
 
+        print(
+            f"{name}: "
+            f"FINAL LIVE TRADE PRICE = "
+            f"{price}"
+        )
+
+        print(
+            f"{name}: "
+            f"FINAL SL = "
+            f"{stop_loss}"
+        )
+
+        print(
+            f"{name}: "
+            f"FINAL TP1 = "
+            f"{tp1}"
+        )
+
+        print(
+            f"{name}: "
+            f"FINAL TP2 = "
+            f"{tp2}"
+        )
+
+        print(
+            f"{name}: "
+            f"FINAL TP3 = "
+            f"{tp3}"
+        )
+
         # ====================================================
         # DUPLICATE FILTER
+        #
+        # IMPORTANT:
+        # Uses FINAL LIVE PRICE.
         # ====================================================
 
         try:
@@ -2646,6 +2904,9 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # SAVE
+        #
+        # IMPORTANT:
+        # All saved prices are FINAL LIVE PRICE.
         # ====================================================
 
         try:
@@ -2677,6 +2938,9 @@ def analyze_market(symbol, name):
         # ====================================================
         # TELEGRAM MESSAGE
         # FINAL CLEAN SIGNAL FORMAT
+        #
+        # IMPORTANT:
+        # price = FINAL LIVE PRICE
         # ====================================================
 
         direction = (
@@ -2775,6 +3039,21 @@ async def main():
     print(
         "Crypto signal delivery: "
         "ENABLED"
+    )
+
+    print(
+        "LIVE PRICE MODE: "
+        "ENABLED"
+    )
+
+    print(
+        "Final LIVE PRICE refresh: "
+        "ENABLED"
+    )
+
+    print(
+        "Old candle price fallback: "
+        "DISABLED"
     )
 
     print(
