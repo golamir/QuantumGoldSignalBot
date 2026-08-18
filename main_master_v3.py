@@ -24,11 +24,22 @@ from no_trade_filter import apply_no_trade_filter
 #
 # Gold + Forex + Crypto
 #
-# LIVE PRICE PROTECTION:
-#   - No old candle price used as final NOW price
-#   - Live 1m price refreshed before Telegram
-#   - SL / TP rebuilt from final live price
-#   - Signal rejected if final live price unavailable
+# CRYPTO TRIANGLE BREAKOUT:
+#   BTC / ETH / SOL / BNB
+#
+# Triangle = SOFT confirmation
+#
+# M5  = Entry
+# M15 = Confirmation
+# H1  = Main trend
+#
+# Hard filters remain:
+#   AI >= 80
+#   Quality >= 80
+#   ADX Crypto >= 20
+#   Trend alignment
+#   RSI valid
+#   TP/SL valid
 #
 # ============================================================
 
@@ -103,6 +114,11 @@ CRYPTO_MARKETS = [
 SWING_LOOKBACK = 3
 STRUCTURE_LOOKBACK = 40
 LIQUIDITY_LOOKBACK = 30
+
+# Crypto triangle
+TRIANGLE_LOOKBACK = 24
+TRIANGLE_MIN_WIDTH_ATR = 1.5
+TRIANGLE_MAX_CONVERGENCE_RATIO = 0.85
 
 
 # ============================================================
@@ -319,10 +335,6 @@ def get_data(symbol, interval="5m"):
 
 # ============================================================
 # LIVE MARKET PRICE
-#
-# IMPORTANT:
-# This function is used only for the CURRENT market price.
-# It is NOT used as an indicator candle.
 # ============================================================
 
 def get_live_market_price(symbol):
@@ -388,22 +400,9 @@ def get_live_market_price(symbol):
 
 # ============================================================
 # FINAL LIVE PRICE
-#
-# Gold:
-#   Try Yahoo 1m first.
-#   Dedicated gold API is secondary fallback.
-#
-# Forex/Crypto:
-#   Yahoo 1m only.
-#
-# NEVER use old candle price here.
 # ============================================================
 
 def get_final_live_price(symbol):
-
-    # --------------------------------------------------------
-    # First source: Yahoo Finance 1m
-    # --------------------------------------------------------
 
     live_price = get_live_market_price(
         symbol
@@ -415,10 +414,6 @@ def get_final_live_price(symbol):
     ):
 
         return float(live_price)
-
-    # --------------------------------------------------------
-    # Gold secondary source
-    # --------------------------------------------------------
 
     if symbol == "GC=F":
 
@@ -449,10 +444,6 @@ def get_final_live_price(symbol):
                 f"Dedicated gold live "
                 f"price error: {e}"
             )
-
-    # --------------------------------------------------------
-    # NO OLD PRICE FALLBACK
-    # --------------------------------------------------------
 
     print(
         f"{symbol}: "
@@ -889,6 +880,323 @@ def detect_displacement(
             "bullish": False,
             "bearish": False
         }
+
+
+# ============================================================
+# CRYPTO SYMMETRICAL TRIANGLE
+#
+# SOFT CONFIRMATION
+#
+# Important:
+# We use CLOSED candles only.
+# Current breakout candle is NOT included in the boundary.
+# ============================================================
+
+def detect_symmetric_triangle(
+    close,
+    high,
+    low,
+    atr_value,
+    lookback=TRIANGLE_LOOKBACK
+):
+
+    result = {
+        "detected": False,
+        "bullish_breakout": False,
+        "bearish_breakout": False,
+        "bullish_retest": False,
+        "bearish_retest": False,
+        "upper_boundary": None,
+        "lower_boundary": None
+    }
+
+    try:
+
+        if (
+            atr_value is None
+            or atr_value <= 0
+            or len(close) < lookback + 10
+        ):
+
+            return result
+
+        # ----------------------------------------------------
+        # Latest CLOSED candle
+        # ----------------------------------------------------
+
+        last_closed = len(close) - 2
+
+        # Need enough candles before breakout candle
+        structure_end = last_closed - 1
+
+        structure_start = max(
+            0,
+            structure_end - lookback + 1
+        )
+
+        if (
+            structure_end
+            - structure_start
+            + 1
+            < 15
+        ):
+
+            return result
+
+        structure_highs = [
+            float(
+                high.iloc[i]
+            )
+            for i in range(
+                structure_start,
+                structure_end + 1
+            )
+        ]
+
+        structure_lows = [
+            float(
+                low.iloc[i]
+            )
+            for i in range(
+                structure_start,
+                structure_end + 1
+            )
+        ]
+
+        if len(structure_highs) < 15:
+            return result
+
+        # ----------------------------------------------------
+        # Split structure into two sections
+        # ----------------------------------------------------
+
+        n = len(structure_highs)
+
+        mid = n // 2
+
+        first_high = max(
+            structure_highs[:mid]
+        )
+
+        second_high = max(
+            structure_highs[mid:]
+        )
+
+        first_low = min(
+            structure_lows[:mid]
+        )
+
+        second_low = min(
+            structure_lows[mid:]
+        )
+
+        # ----------------------------------------------------
+        # Converging structure
+        # ----------------------------------------------------
+
+        upper_falling = (
+            second_high < first_high
+        )
+
+        lower_rising = (
+            second_low > first_low
+        )
+
+        if not (
+            upper_falling
+            and lower_rising
+        ):
+
+            return result
+
+        first_width = (
+            first_high
+            - first_low
+        )
+
+        second_width = (
+            second_high
+            - second_low
+        )
+
+        if first_width <= 0:
+            return result
+
+        convergence_ratio = (
+            second_width
+            / first_width
+        )
+
+        if (
+            convergence_ratio
+            > TRIANGLE_MAX_CONVERGENCE_RATIO
+        ):
+
+            return result
+
+        if (
+            first_width
+            < atr_value * TRIANGLE_MIN_WIDTH_ATR
+        ):
+
+            return result
+
+        # ----------------------------------------------------
+        # Approximate current triangle boundaries
+        #
+        # Use the latest structure extremes,
+        # NOT the breakout candle.
+        # ----------------------------------------------------
+
+        upper_boundary = second_high
+        lower_boundary = second_low
+
+        result["detected"] = True
+
+        result["upper_boundary"] = (
+            upper_boundary
+        )
+
+        result["lower_boundary"] = (
+            lower_boundary
+        )
+
+        # ----------------------------------------------------
+        # Breakout candle
+        # ----------------------------------------------------
+
+        breakout_close = float(
+            close.iloc[last_closed]
+        )
+
+        breakout_high = float(
+            high.iloc[last_closed]
+        )
+
+        breakout_low = float(
+            low.iloc[last_closed]
+        )
+
+        breakout_buffer = (
+            atr_value * 0.05
+        )
+
+        bullish_breakout = (
+            breakout_close
+            > upper_boundary
+            + breakout_buffer
+        )
+
+        bearish_breakout = (
+            breakout_close
+            < lower_boundary
+            - breakout_buffer
+        )
+
+        result[
+            "bullish_breakout"
+        ] = bullish_breakout
+
+        result[
+            "bearish_breakout"
+        ] = bearish_breakout
+
+        # ----------------------------------------------------
+        # RETEST
+        #
+        # Search previous closed candles.
+        # ----------------------------------------------------
+
+        retest_start = max(
+            structure_start,
+            last_closed - 7
+        )
+
+        if bullish_breakout:
+
+            for i in range(
+                retest_start,
+                last_closed
+            ):
+
+                candle_low = float(
+                    low.iloc[i]
+                )
+
+                candle_close = float(
+                    close.iloc[i]
+                )
+
+                near_boundary = (
+                    abs(
+                        candle_low
+                        - upper_boundary
+                    )
+                    <= atr_value * 0.30
+                )
+
+                held = (
+                    candle_close
+                    >= upper_boundary
+                    - atr_value * 0.10
+                )
+
+                if (
+                    near_boundary
+                    and held
+                ):
+
+                    result[
+                        "bullish_retest"
+                    ] = True
+
+        if bearish_breakout:
+
+            for i in range(
+                retest_start,
+                last_closed
+            ):
+
+                candle_high = float(
+                    high.iloc[i]
+                )
+
+                candle_close = float(
+                    close.iloc[i]
+                )
+
+                near_boundary = (
+                    abs(
+                        candle_high
+                        - lower_boundary
+                    )
+                    <= atr_value * 0.30
+                )
+
+                held = (
+                    candle_close
+                    <= lower_boundary
+                    + atr_value * 0.10
+                )
+
+                if (
+                    near_boundary
+                    and held
+                ):
+
+                    result[
+                        "bearish_retest"
+                    ] = True
+
+        return result
+
+    except Exception as e:
+
+        print(
+            f"Triangle detection error: {e}"
+        )
+
+        return result
 
 
 # ============================================================
@@ -1339,7 +1647,12 @@ def calculate_quality_score(
     displacement_confirmed=False,
     dxy_confirmed=False,
     gainz_v2_confirmed=False,
-    gainz_pro_confirmed=False
+    gainz_pro_confirmed=False,
+    triangle_breakout=False,
+    triangle_volume=False,
+    triangle_retest=False,
+    triangle_m15_confirmation=False,
+    triangle_h1_alignment=False
 ):
 
     score = 0
@@ -1435,33 +1748,56 @@ def calculate_quality_score(
 
         score -= 10
 
-    if structure_confirmed:
+    # ========================================================
+    # SMART MONEY
+    # ========================================================
 
+    if structure_confirmed:
         score += 5
 
     if liquidity_confirmed:
-
         score += 5
 
     if fvg_confirmed:
-
         score += 5
 
     if displacement_confirmed:
-
         score += 5
 
     if dxy_confirmed:
-
         score += 5
 
-    if gainz_v2_confirmed:
+    # ========================================================
+    # GAINZALGO
+    # ========================================================
 
+    if gainz_v2_confirmed:
         score += GAINZ_V2_BONUS
 
     if gainz_pro_confirmed:
-
         score += GAINZ_PRO_BONUS
+
+    # ========================================================
+    # CRYPTO TRIANGLE
+    #
+    # SOFT CONFIRMATION
+    # Maximum +25
+    # ========================================================
+
+    if triangle_breakout:
+        score += 5
+
+    if triangle_volume:
+        score += 5
+
+    if triangle_retest:
+        score += 5
+
+    if triangle_m15_confirmation:
+        score += 5
+
+    if triangle_h1_alignment:
+        score += 5
 
     return max(
         0,
@@ -1527,6 +1863,8 @@ def master_quality_filter(
             f"ADX below {required_adx}"
         )
 
+    # Gold / Forex volume = HARD
+    # Crypto volume = SOFT
     if not crypto:
 
         if not volume_confirmed:
@@ -1583,7 +1921,7 @@ def analyze_market(symbol, name):
         crypto = is_crypto_market(symbol)
 
         # ====================================================
-        # WEEKEND FILTER
+        # WEEKEND
         # ====================================================
 
         if (
@@ -1630,8 +1968,7 @@ def analyze_market(symbol, name):
                 print(
                     f"{name}: "
                     f"Global news risk HIGH "
-                    f"-> Crypto news treated "
-                    f"as SOFT/MEDIUM"
+                    f"-> Crypto treated as MEDIUM"
                 )
 
                 news_risk = "MEDIUM"
@@ -1640,21 +1977,15 @@ def analyze_market(symbol, name):
 
                 news_risk = raw_news_risk
 
-            print(
-                f"{name}: "
-                f"Effective News Risk = "
-                f"{news_risk}"
-            )
-
         else:
 
             news_risk = raw_news_risk
 
-            print(
-                f"{name}: "
-                f"Effective News Risk = "
-                f"{news_risk}"
-            )
+        print(
+            f"{name}: "
+            f"Effective News Risk = "
+            f"{news_risk}"
+        )
 
         # ====================================================
         # DATA
@@ -1712,9 +2043,6 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # INITIAL LIVE PRICE
-        #
-        # This is only the first live-price snapshot.
-        # Final price is refreshed again before sending.
         # ====================================================
 
         price = get_final_live_price(
@@ -2011,23 +2339,12 @@ def analyze_market(symbol, name):
             >= avg_volume * 1.05
         )
 
-        if crypto:
-
-            print(
-                f"{name}: "
-                f"Volume confirmation="
-                f"{volume_confirmed} "
-                f"(SOFT for Crypto)"
-            )
-
-        else:
-
-            print(
-                f"{name}: "
-                f"Volume confirmation="
-                f"{volume_confirmed} "
-                f"(HARD)"
-            )
+        print(
+            f"{name}: "
+            f"Volume confirmation="
+            f"{volume_confirmed} "
+            f"({'SOFT' if crypto else 'HARD'})"
+        )
 
         # ====================================================
         # SMART MONEY
@@ -2060,6 +2377,94 @@ def analyze_market(symbol, name):
         )
 
         # ====================================================
+        # CRYPTO TRIANGLE
+        # ====================================================
+
+        triangle = {
+            "detected": False,
+            "bullish_breakout": False,
+            "bearish_breakout": False,
+            "bullish_retest": False,
+            "bearish_retest": False,
+            "upper_boundary": None,
+            "lower_boundary": None
+        }
+
+        triangle_m15 = {
+            "detected": False,
+            "bullish_breakout": False,
+            "bearish_breakout": False,
+            "bullish_retest": False,
+            "bearish_retest": False,
+            "upper_boundary": None,
+            "lower_boundary": None
+        }
+
+        if crypto:
+
+            triangle = detect_symmetric_triangle(
+                close,
+                high,
+                low,
+                atr_value
+            )
+
+            m15_atr = ta.volatility.average_true_range(
+                m15["high"],
+                m15["low"],
+                m15["close"],
+                14
+            )
+
+            m15_atr_value = safe_float(
+                m15_atr,
+                -2
+            )
+
+            if (
+                m15_atr_value is not None
+                and m15_atr_value > 0
+            ):
+
+                triangle_m15 = (
+                    detect_symmetric_triangle(
+                        m15["close"],
+                        m15["high"],
+                        m15["low"],
+                        m15_atr_value
+                    )
+                )
+
+            print(
+                f"{name}: "
+                f"Triangle detected="
+                f"{triangle['detected']}"
+            )
+
+            print(
+                f"{name}: "
+                f"Triangle BUY breakout="
+                f"{triangle['bullish_breakout']} "
+                f"SELL breakdown="
+                f"{triangle['bearish_breakout']}"
+            )
+
+            print(
+                f"{name}: "
+                f"Triangle BUY retest="
+                f"{triangle['bullish_retest']} "
+                f"SELL retest="
+                f"{triangle['bearish_retest']}"
+            )
+
+            print(
+                f"{name}: "
+                f"M15 Triangle BUY="
+                f"{triangle_m15['bullish_breakout']} "
+                f"SELL="
+                f"{triangle_m15['bearish_breakout']}")
+
+        # ====================================================
         # BUY / SELL SCORE
         # ====================================================
 
@@ -2067,103 +2472,134 @@ def analyze_market(symbol, name):
         sell_score = 0
 
         if ema_bullish:
-
             buy_score += 20
-
         else:
-
             sell_score += 20
 
         if macd_bullish:
-
             buy_score += 20
-
         else:
-
             sell_score += 20
 
         if m15_bullish:
-
             buy_score += 20
-
         else:
-
             sell_score += 20
 
         if h1_bullish:
-
             buy_score += 20
-
         else:
-
             sell_score += 20
 
         if 45 < r < 70:
-
             buy_score += 10
 
         if 30 < r < 55:
-
             sell_score += 10
 
         if adx_value >= 25:
-
             buy_score += 10
             sell_score += 10
 
         if gainz_v2_buy:
-
             buy_score += GAINZ_V2_BONUS
 
         if gainz_v2_sell:
-
             sell_score += GAINZ_V2_BONUS
 
         if gainz_pro_buy:
-
             buy_score += GAINZ_PRO_BONUS
 
         if gainz_pro_sell:
-
             sell_score += GAINZ_PRO_BONUS
 
         if (
             structure["bullish_bos"]
             or structure["bullish_choch"]
         ):
-
             buy_score += 10
 
         if (
             structure["bearish_bos"]
             or structure["bearish_choch"]
         ):
-
             sell_score += 10
 
         if liquidity["bullish"]:
-
             buy_score += 10
 
         if liquidity["bearish"]:
-
             sell_score += 10
 
         if displacement["bullish"]:
-
             buy_score += 5
 
         if displacement["bearish"]:
-
             sell_score += 5
 
         if fvg["bullish"]:
-
             buy_score += 5
 
         if fvg["bearish"]:
-
             sell_score += 5
+
+        # ====================================================
+        # CRYPTO TRIANGLE SCORE
+        #
+        # SOFT ONLY
+        # ====================================================
+
+        if crypto:
+
+            # BUY
+            if triangle["bullish_breakout"]:
+                buy_score += 5
+
+            if (
+                triangle["bullish_breakout"]
+                and volume_confirmed
+            ):
+                buy_score += 5
+
+            if triangle["bullish_retest"]:
+                buy_score += 5
+
+            if (
+                triangle_m15["bullish_breakout"]
+                or triangle_m15["bullish_retest"]
+            ):
+                buy_score += 5
+
+            if (
+                triangle["bullish_breakout"]
+                and h1_bullish
+            ):
+                buy_score += 5
+
+            # SELL
+            if triangle["bearish_breakout"]:
+                sell_score += 5
+
+            if (
+                triangle["bearish_breakout"]
+                and volume_confirmed
+            ):
+                sell_score += 5
+
+            if triangle["bearish_retest"]:
+                sell_score += 5
+
+            if (
+                triangle_m15["bearish_breakout"]
+                or triangle_m15["bearish_retest"]
+            ):
+                sell_score += 5
+
+            if (
+                triangle["bearish_breakout"]
+                and not h1_bullish
+            ):
+                sell_score += 5
 
         # ====================================================
         # SIGNAL CANDIDATE
@@ -2212,6 +2648,110 @@ def analyze_market(symbol, name):
         )
 
         # ====================================================
+        # TRIANGLE CONFIRMATION VARIABLES
+        # ====================================================
+
+        if crypto:
+
+            if signal == "🟢 BUY":
+
+                triangle_breakout = (
+                    triangle["bullish_breakout"]
+                )
+
+                triangle_volume = (
+                    triangle_breakout
+                    and volume_confirmed
+                )
+
+                triangle_retest = (
+                    triangle["bullish_retest"]
+                )
+
+                triangle_m15_confirmation = (
+                    triangle_m15[
+                        "bullish_breakout"
+                    ]
+                    or
+                    triangle_m15[
+                        "bullish_retest"
+                    ]
+                )
+
+                triangle_h1_alignment = (
+                    h1_bullish
+                )
+
+            else:
+
+                triangle_breakout = (
+                    triangle["bearish_breakout"]
+                )
+
+                triangle_volume = (
+                    triangle_breakout
+                    and volume_confirmed
+                )
+
+                triangle_retest = (
+                    triangle["bearish_retest"]
+                )
+
+                triangle_m15_confirmation = (
+                    triangle_m15[
+                        "bearish_breakout"
+                    ]
+                    or
+                    triangle_m15[
+                        "bearish_retest"
+                    ]
+                )
+
+                triangle_h1_alignment = (
+                    not h1_bullish
+                )
+
+        else:
+
+            triangle_breakout = False
+            triangle_volume = False
+            triangle_retest = False
+            triangle_m15_confirmation = False
+            triangle_h1_alignment = False
+
+        if crypto:
+
+            print(
+                f"{name}: "
+                f"Triangle Breakout="
+                f"{triangle_breakout}"
+            )
+
+            print(
+                f"{name}: "
+                f"Triangle Volume="
+                f"{triangle_volume}"
+            )
+
+            print(
+                f"{name}: "
+                f"Triangle Retest="
+                f"{triangle_retest}"
+            )
+
+            print(
+                f"{name}: "
+                f"Triangle M15="
+                f"{triangle_m15_confirmation}"
+            )
+
+            print(
+                f"{name}: "
+                f"Triangle H1="
+                f"{triangle_h1_alignment}"
+            )
+
+        # ====================================================
         # GAINZ CONFIRMATION
         # ====================================================
 
@@ -2245,7 +2785,12 @@ def analyze_market(symbol, name):
             support,
             resistance,
             r,
-            preliminary
+            preliminary,
+            triangle_breakout=triangle_breakout,
+            breakout_volume=triangle_volume,
+            successful_retest=triangle_retest,
+            m15_confirmation=triangle_m15_confirmation,
+            h1_trend_alignment=triangle_h1_alignment
         )
 
         if not entry:
@@ -2342,7 +2887,7 @@ def analyze_market(symbol, name):
             )
 
         # ====================================================
-        # TP / SL MULTIPLIERS
+        # TP / SL
         # ====================================================
 
         if symbol == "GC=F":
@@ -2535,7 +3080,12 @@ def analyze_market(symbol, name):
             displacement_confirmed,
             dxy_confirmed,
             gainz_v2_confirmed,
-            gainz_pro_confirmed
+            gainz_pro_confirmed,
+            triangle_breakout,
+            triangle_volume,
+            triangle_retest,
+            triangle_m15_confirmation,
+            triangle_h1_alignment
         )
 
         # ====================================================
@@ -2717,6 +3267,33 @@ def analyze_market(symbol, name):
                 f"{gainz_pro_confirmed}"
             )
 
+            if crypto:
+
+                print(
+                    f"Triangle Breakout: "
+                    f"{triangle_breakout}"
+                )
+
+                print(
+                    f"Triangle Volume: "
+                    f"{triangle_volume}"
+                )
+
+                print(
+                    f"Triangle Retest: "
+                    f"{triangle_retest}"
+                )
+
+                print(
+                    f"Triangle M15: "
+                    f"{triangle_m15_confirmation}"
+                )
+
+                print(
+                    f"Triangle H1: "
+                    f"{triangle_h1_alignment}"
+                )
+
             print(
                 f"Reason: "
                 f"{reason}"
@@ -2726,14 +3303,6 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # FINAL LIVE PRICE REFRESH
-        #
-        # THIS IS THE CRITICAL FIX.
-        #
-        # The signal can take time to reach this point.
-        # Therefore we get a NEW LIVE PRICE immediately
-        # before duplicate checking, saving and Telegram.
-        #
-        # NEVER use old candle price as fallback here.
         # ====================================================
 
         old_price = price
@@ -2816,7 +3385,7 @@ def analyze_market(symbol, name):
             )
 
         # ====================================================
-        # FINAL LIVE TP / SL VALIDATION
+        # FINAL TP / SL VALIDATION
         # ====================================================
 
         final_live_valid, final_live_reason = (
@@ -2872,9 +3441,6 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # DUPLICATE FILTER
-        #
-        # IMPORTANT:
-        # Uses FINAL LIVE PRICE.
         # ====================================================
 
         try:
@@ -2904,9 +3470,6 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # SAVE
-        #
-        # IMPORTANT:
-        # All saved prices are FINAL LIVE PRICE.
         # ====================================================
 
         try:
@@ -2936,11 +3499,7 @@ def analyze_market(symbol, name):
             )
 
         # ====================================================
-        # TELEGRAM MESSAGE
-        # FINAL CLEAN SIGNAL FORMAT
-        #
-        # IMPORTANT:
-        # price = FINAL LIVE PRICE
+        # TELEGRAM
         # ====================================================
 
         direction = (
@@ -3021,6 +3580,20 @@ async def main():
 
     print(
         "Markets: Gold + Forex + Crypto"
+    )
+
+    print(
+        "Crypto: BTC / ETH / SOL / BNB"
+    )
+
+    print(
+        "Triangle Breakout: "
+        "ENABLED FOR ALL CRYPTO"
+    )
+
+    print(
+        "Triangle Mode: "
+        "SOFT CONFIRMATION"
     )
 
     print(
