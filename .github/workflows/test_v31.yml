@@ -1,4 +1,4 @@
-name: QuantumGold V3.1 Test
+name: QuantumGold V3.1 Microstructure Test
 
 on:
   workflow_dispatch:
@@ -8,7 +8,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -21,13 +22,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install yfinance pandas numpy ta requests python-telegram-bot
 
-      - name: Syntax check
+      - name: Check Python version
         run: |
-          python -m py_compile main_master_v3_1.py
+          python --version
+          pip --version
 
-      - name: Run V3.1
+      - name: Check V3.1 file exists
+        run: |
+          ls -la
+          test -f QuantumGold_MASTER_FILTER_V3_1_Microstructure.py
+          echo "V3.1 file found successfully."
+
+      - name: Syntax check V3.1
+        run: |
+          python -m py_compile QuantumGold_MASTER_FILTER_V3_1_Microstructure.py
+          echo "Syntax check passed."
+
+      - name: Run QuantumGold V3.1
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python main_master_v3_1.py
+          python QuantumGold_MASTER_FILTER_V3_1_Microstructure.py
