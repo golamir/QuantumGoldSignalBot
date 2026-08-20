@@ -1,0 +1,33 @@
+name: QuantumGold V3.1 Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-v31:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas numpy ta requests python-telegram-bot
+
+      - name: Syntax check
+        run: |
+          python -m py_compile main_master_v3_1.py
+
+      - name: Run V3.1
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python main_master_v3_1.py
