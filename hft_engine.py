@@ -1,48 +1,18 @@
 # ============================================================
-# QuantumGold HFT ENGINE V3.2
-# OHLCV-based Microstructure / HFT-style
+# QuantumGold HFT-STYLE ENGINE
+# V3.2
 #
 # IMPORTANT:
 # This is NOT true exchange HFT.
-# It uses candle + volume data only.
+# It is OHLCV-based short-term microstructure analysis.
 # ============================================================
 
 import math
 
 
-# ============================================================
-# SETTINGS
-# ============================================================
-
-HFT_ENABLED = True
-
-HFT_MIN_SCORE = 60
-
-HFT_STRONG_SCORE = 75
-
-HFT_CONFIRM_BONUS = 5
-
-HFT_CONFLICT_PENALTY = 7
-
-HFT_LOOKBACK = 20
-
-HFT_VOLUME_SPIKE = 1.20
-
-HFT_RANGE_EXPANSION = 1.25
-
-HFT_IMPULSE_ATR = 0.35
-
-HFT_EXHAUSTION_WICK = 0.45
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-
 def _safe_float(value, default=0.0):
 
     try:
-
         value = float(value)
 
         if math.isfinite(value):
@@ -51,31 +21,35 @@ def _safe_float(value, default=0.0):
         return default
 
     except Exception:
-
         return default
 
 
-def _ratio(a, b, default=0.0):
+def _safe_ratio(a, b, default=0.0):
+
+    b = _safe_float(b, 0.0)
+
+    if abs(b) < 1e-12:
+        return default
+
+    return _safe_float(a, 0.0) / b
+
+
+def _clamp(value, low=0, high=100):
 
     try:
-
-        b = float(b)
-
-        if abs(b) < 1e-12:
-            return default
-
-        return float(a) / b
+        return max(
+            low,
+            min(
+                high,
+                int(round(float(value)))
+            )
+        )
 
     except Exception:
+        return low
 
-        return default
 
-
-# ============================================================
-# MAIN ENGINE
-# ============================================================
-
-def analyze_hft(
+def analyze_hft_style(
     open_price,
     close,
     high,
@@ -85,54 +59,40 @@ def analyze_hft(
 ):
 
     neutral = {
-        "score": 50,
         "buy_score": 0,
         "sell_score": 0,
+        "score": 50,
         "direction": "NEUTRAL",
-
-        "impulse": 0.0,
+        "confirmed": False,
+        "conflict": False,
         "velocity": 0.0,
-
+        "acceleration": 0.0,
+        "range_ratio": 1.0,
         "volume_ratio": 0.0,
-        "range_ratio": 0.0,
-
-        "buy_pressure": 0.0,
-        "sell_pressure": 0.0,
-
+        "body_ratio": 0.0,
+        "pressure": 0.0,
         "breakout_buy": False,
         "breakout_sell": False,
-
-        "fake_breakout_buy": False,
-        "fake_breakout_sell": False,
-
-        "rejection_buy": False,
-        "rejection_sell": False,
-
-        "pullback_buy": False,
-        "pullback_sell": False,
-
+        "volume_surge": False,
+        "range_expansion": False,
+        "momentum_buy": False,
+        "momentum_sell": False,
         "exhaustion_buy": False,
         "exhaustion_sell": False,
-
-        "strong_buy": False,
-        "strong_sell": False,
-
-        "reason": "No HFT data"
+        "reason": "HFT-style unavailable"
     }
 
     try:
 
         i = len(close) - 2
 
-        atr = _safe_float(atr_value)
+        atr = _safe_float(
+            atr_value,
+            0.0
+        )
 
-        if i < HFT_LOOKBACK + 3 or atr <= 0:
-
+        if i < 25 or atr <= 0:
             return neutral
-
-        # ====================================================
-        # CURRENT CLOSED CANDLE
-        # ====================================================
 
         o = _safe_float(
             open_price.iloc[i]
@@ -150,216 +110,166 @@ def analyze_hft(
             low.iloc[i]
         )
 
-        previous_close = _safe_float(
+        pc = _safe_float(
             close.iloc[i - 1]
         )
 
-        previous_open = _safe_float(
-            open_price.iloc[i - 1]
+        ppc = _safe_float(
+            close.iloc[i - 2]
         )
 
         if h <= l:
-
             return neutral
 
         candle_range = h - l
-
         body = abs(c - o)
 
-        upper_wick = h - max(o, c)
-
-        lower_wick = min(o, c) - l
-
-        body_ratio = _ratio(
+        body_ratio = _safe_ratio(
             body,
             candle_range
         )
 
-        close_location = _ratio(
+        close_location = _safe_ratio(
             c - l,
             candle_range
         )
 
-        # ====================================================
-        # HISTORY
-        # ====================================================
+        velocity = _safe_ratio(
+            c - pc,
+            atr
+        )
+
+        previous_velocity = _safe_ratio(
+            pc - ppc,
+            atr
+        )
+
+        acceleration = (
+            velocity
+            - previous_velocity
+        )
 
         start = max(
             0,
-            i - HFT_LOOKBACK
+            i - 20
         )
 
-        previous_high = _safe_float(
-            high.iloc[start:i].max()
+        ranges = []
+
+        for x in range(start, i):
+
+            r = (
+                _safe_float(high.iloc[x])
+                -
+                _safe_float(low.iloc[x])
+            )
+
+            if r > 0:
+                ranges.append(r)
+
+        avg_range = (
+            sum(ranges) / len(ranges)
+            if ranges
+            else candle_range
         )
 
-        previous_low = _safe_float(
-            low.iloc[start:i].min()
+        range_ratio = _safe_ratio(
+            candle_range,
+            avg_range,
+            1.0
         )
 
-        historical_ranges = (
-            high.iloc[start:i]
-            - low.iloc[start:i]
-        )
+        volumes = []
 
-        avg_range = _safe_float(
-            historical_ranges.median()
-        )
+        for x in range(start, i):
 
-        historical_volume = (
-            volume.iloc[start:i]
-        )
+            v = _safe_float(
+                volume.iloc[x]
+            )
 
-        avg_volume = _safe_float(
-            historical_volume.mean()
+            if v > 0:
+                volumes.append(v)
+
+        avg_volume = (
+            sum(volumes) / len(volumes)
+            if volumes
+            else 0.0
         )
 
         current_volume = _safe_float(
             volume.iloc[i]
         )
 
-        # ====================================================
-        # MOMENTUM
-        # ====================================================
-
-        impulse = _ratio(
-            c - o,
-            atr
-        )
-
-        velocity = _ratio(
-            c - previous_close,
-            atr
-        )
-
-        range_ratio = _ratio(
-            candle_range,
-            avg_range,
-            1.0
-        )
-
-        volume_ratio = _ratio(
+        volume_ratio = _safe_ratio(
             current_volume,
-            avg_volume
+            avg_volume,
+            0.0
         )
 
-        # ====================================================
-        # PRESSURE
-        # ====================================================
-
-        close_location = max(
-            0.0,
-            min(
-                1.0,
-                close_location
-            )
+        prev_high = max(
+            _safe_float(high.iloc[x])
+            for x in range(start, i)
         )
 
-        buy_pressure = (
-            close_location
-            * body_ratio
-            * 100
+        prev_low = min(
+            _safe_float(low.iloc[x])
+            for x in range(start, i)
         )
-
-        sell_pressure = (
-            (1.0 - close_location)
-            * body_ratio
-            * 100
-        )
-
-        # ====================================================
-        # BREAKOUT
-        # ====================================================
 
         breakout_buy = (
-            c > previous_high
+            c > prev_high
         )
 
         breakout_sell = (
-            c < previous_low
+            c < prev_low
         )
 
-        # ====================================================
-        # LIQUIDITY / FAKE BREAKOUT
-        # ====================================================
-
-        fake_breakout_buy = (
-            l < previous_low
-            and c > previous_low
+        upper_wick = (
+            h - max(o, c)
         )
 
-        fake_breakout_sell = (
-            h > previous_high
-            and c < previous_high
+        lower_wick = (
+            min(o, c) - l
         )
 
-        # ====================================================
-        # REJECTION
-        # ====================================================
-
-        rejection_buy = (
-            lower_wick >= candle_range * 0.30
-            and close_location >= 0.65
+        pressure = (
+            close_location * 2
+            - 1
         )
 
-        rejection_sell = (
-            upper_wick >= candle_range * 0.30
-            and close_location <= 0.35
+        volume_surge = (
+            volume_ratio >= 1.50
         )
 
-        # ====================================================
-        # PULLBACK
-        # ====================================================
-
-        previous_bearish = (
-            previous_close < previous_open
+        range_expansion = (
+            range_ratio >= 1.35
         )
 
-        previous_bullish = (
-            previous_close > previous_open
+        momentum_buy = (
+            velocity >= 0.25
+            and acceleration >= 0
         )
 
-        current_bullish = (
-            c > o
+        momentum_sell = (
+            velocity <= -0.25
+            and acceleration <= 0
         )
 
-        current_bearish = (
-            c < o
-        )
-
-        pullback_buy = (
-            previous_bearish
-            and current_bullish
-            and c > previous_close
-        )
-
-        pullback_sell = (
-            previous_bullish
-            and current_bearish
-            and c < previous_close
-        )
-
-        # ====================================================
-        # EXHAUSTION
-        # ====================================================
+        # ----------------------------------------------------
+        # Momentum exhaustion
+        # ----------------------------------------------------
 
         exhaustion_buy = (
-            c > o
-            and upper_wick >= candle_range
-            * HFT_EXHAUSTION_WICK
-            and body_ratio < 0.55
+            velocity >= 0.80
+            and upper_wick > body
+            and close_location < 0.70
         )
 
         exhaustion_sell = (
-            c < o
-            and lower_wick >= candle_range
-            * HFT_EXHAUSTION_WICK
-            and body_ratio < 0.55
+            velocity <= -0.80
+            and lower_wick > body
+            and close_location > 0.30
         )
-
-        # ====================================================
-        # SCORING
-        # ====================================================
 
         buy = 0
         sell = 0
@@ -367,36 +277,28 @@ def analyze_hft(
         reasons = []
 
         # ----------------------------------------------------
-        # IMPULSE
-        # ----------------------------------------------------
-
-        if impulse >= HFT_IMPULSE_ATR:
-
-            buy += 18
-
-            reasons.append(
-                "bullish impulse"
-            )
-
-        elif impulse <= -HFT_IMPULSE_ATR:
-
-            sell += 18
-
-            reasons.append(
-                "bearish impulse"
-            )
-
-        # ----------------------------------------------------
         # VELOCITY
         # ----------------------------------------------------
 
-        if velocity >= 0.20:
+        if velocity >= 0.25:
+            buy += 15
+            reasons.append("bullish velocity")
 
-            buy += 12
+        elif velocity <= -0.25:
+            sell += 15
+            reasons.append("bearish velocity")
 
-        elif velocity <= -0.20:
+        # ----------------------------------------------------
+        # ACCELERATION
+        # ----------------------------------------------------
 
-            sell += 12
+        if acceleration >= 0.12:
+            buy += 15
+            reasons.append("bullish acceleration")
+
+        elif acceleration <= -0.12:
+            sell += 15
+            reasons.append("bearish acceleration")
 
         # ----------------------------------------------------
         # CANDLE PRESSURE
@@ -420,39 +322,39 @@ def analyze_hft(
         # RANGE EXPANSION
         # ----------------------------------------------------
 
-        if range_ratio >= HFT_RANGE_EXPANSION:
+        if range_expansion:
 
-            if current_bullish:
+            if c > o:
 
                 buy += 10
 
-            elif current_bearish:
+            elif c < o:
 
                 sell += 10
 
         # ----------------------------------------------------
-        # VOLUME
+        # VOLUME SURGE
         # ----------------------------------------------------
 
-        if volume_ratio >= 1.50:
+        if volume_surge:
 
-            if current_bullish:
+            if c > o:
 
                 buy += 15
+                reasons.append("volume surge BUY")
 
-            elif current_bearish:
+            elif c < o:
 
                 sell += 15
+                reasons.append("volume surge SELL")
 
-        elif volume_ratio >= HFT_VOLUME_SPIKE:
+        elif volume_ratio >= 1.20:
 
-            if current_bullish:
+            if c > o:
+                buy += 7
 
-                buy += 10
-
-            elif current_bearish:
-
-                sell += 10
+            elif c < o:
+                sell += 7
 
         # ----------------------------------------------------
         # BREAKOUT
@@ -460,76 +362,16 @@ def analyze_hft(
 
         if breakout_buy:
 
-            buy += 15
-
-            reasons.append(
-                "upside breakout"
-            )
+            buy += 18
+            reasons.append("upside breakout")
 
         if breakout_sell:
 
-            sell += 15
-
-            reasons.append(
-                "downside breakout"
-            )
+            sell += 18
+            reasons.append("downside breakout")
 
         # ----------------------------------------------------
-        # LIQUIDITY SWEEP
-        # ----------------------------------------------------
-
-        if fake_breakout_buy:
-
-            buy += 12
-
-            sell = max(
-                0,
-                sell - 8
-            )
-
-            reasons.append(
-                "bullish liquidity sweep"
-            )
-
-        if fake_breakout_sell:
-
-            sell += 12
-
-            buy = max(
-                0,
-                buy - 8
-            )
-
-            reasons.append(
-                "bearish liquidity sweep"
-            )
-
-        # ----------------------------------------------------
-        # REJECTION
-        # ----------------------------------------------------
-
-        if rejection_buy:
-
-            buy += 8
-
-        if rejection_sell:
-
-            sell += 8
-
-        # ----------------------------------------------------
-        # PULLBACK
-        # ----------------------------------------------------
-
-        if pullback_buy:
-
-            buy += 8
-
-        if pullback_sell:
-
-            sell += 8
-
-        # ----------------------------------------------------
-        # EXHAUSTION PENALTY
+        # EXHAUSTION
         # ----------------------------------------------------
 
         if exhaustion_buy:
@@ -539,8 +381,10 @@ def analyze_hft(
                 buy - 12
             )
 
+            sell += 8
+
             reasons.append(
-                "bullish exhaustion"
+                "bullish exhaustion risk"
             )
 
         if exhaustion_sell:
@@ -550,63 +394,33 @@ def analyze_hft(
                 sell - 12
             )
 
+            buy += 8
+
             reasons.append(
-                "bearish exhaustion"
+                "bearish exhaustion risk"
             )
 
-        # ====================================================
-        # LIMIT
-        # ====================================================
+        # ----------------------------------------------------
+        # SCORE
+        # ----------------------------------------------------
 
-        buy = int(
-            max(
-                0,
-                min(
-                    100,
-                    buy
-                )
-            )
+        buy = _clamp(buy)
+        sell = _clamp(sell)
+
+        score = _clamp(
+            50 + (buy - sell) * 0.50
         )
-
-        sell = int(
-            max(
-                0,
-                min(
-                    100,
-                    sell
-                )
-            )
-        )
-
-        # ====================================================
-        # FINAL SCORE
-        # ====================================================
-
-        score = int(
-            max(
-                0,
-                min(
-                    100,
-                    50
-                    + (buy - sell) * 0.5
-                )
-            )
-        )
-
-        # ====================================================
-        # DIRECTION
-        # ====================================================
 
         if (
             buy > sell
-            and buy >= HFT_MIN_SCORE
+            and buy >= 65
         ):
 
             direction = "BUY"
 
         elif (
             sell > buy
-            and sell >= HFT_MIN_SCORE
+            and sell >= 65
         ):
 
             direction = "SELL"
@@ -615,142 +429,90 @@ def analyze_hft(
 
             direction = "NEUTRAL"
 
-        strong_buy = (
-            direction == "BUY"
-            and buy >= HFT_STRONG_SCORE
-        )
-
-        strong_sell = (
-            direction == "SELL"
-            and sell >= HFT_STRONG_SCORE
-        )
-
         return {
-
-            "score": score,
-
             "buy_score": buy,
-
             "sell_score": sell,
-
+            "score": score,
             "direction": direction,
-
-            "impulse": impulse,
-
+            "confirmed": direction != "NEUTRAL",
+            "conflict": False,
             "velocity": velocity,
-
-            "volume_ratio": volume_ratio,
-
+            "acceleration": acceleration,
             "range_ratio": range_ratio,
-
-            "buy_pressure": buy_pressure,
-
-            "sell_pressure": sell_pressure,
-
+            "volume_ratio": volume_ratio,
+            "body_ratio": body_ratio,
+            "pressure": pressure,
             "breakout_buy": breakout_buy,
-
             "breakout_sell": breakout_sell,
-
-            "fake_breakout_buy":
-                fake_breakout_buy,
-
-            "fake_breakout_sell":
-                fake_breakout_sell,
-
-            "rejection_buy":
-                rejection_buy,
-
-            "rejection_sell":
-                rejection_sell,
-
-            "pullback_buy":
-                pullback_buy,
-
-            "pullback_sell":
-                pullback_sell,
-
-            "exhaustion_buy":
-                exhaustion_buy,
-
-            "exhaustion_sell":
-                exhaustion_sell,
-
-            "strong_buy":
-                strong_buy,
-
-            "strong_sell":
-                strong_sell,
-
-            "reason":
+            "volume_surge": volume_surge,
+            "range_expansion": range_expansion,
+            "momentum_buy": momentum_buy,
+            "momentum_sell": momentum_sell,
+            "exhaustion_buy": exhaustion_buy,
+            "exhaustion_sell": exhaustion_sell,
+            "reason": (
                 ", ".join(reasons)
                 if reasons
-                else "No strong microstructure event"
+                else "No strong HFT-style event"
+            )
         }
 
     except Exception as e:
 
         print(
-            f"HFT engine error: {e}"
+            f"HFT-style engine error: {e}"
         )
 
         return neutral
 
 
-# ============================================================
-# SIGNAL CONFIRMATION
-# ============================================================
-
-def hft_confirms(signal, hft):
-
-    if not HFT_ENABLED:
-
-        return False
-
-    direction = hft.get(
-        "direction",
-        "NEUTRAL"
-    )
-
-    buy_score = hft.get(
-        "buy_score",
-        0
-    )
-
-    sell_score = hft.get(
-        "sell_score",
-        0
-    )
+def hft_confirms(
+    signal,
+    hft
+):
 
     if signal == "🟢 BUY":
 
         return (
-            direction == "BUY"
-            and buy_score >= HFT_MIN_SCORE
+            hft.get("direction") == "BUY"
+            and
+            hft.get("buy_score", 0)
+            >= 65
         )
 
     if signal == "🔴 SELL":
 
         return (
-            direction == "SELL"
-            and sell_score >= HFT_MIN_SCORE
+            hft.get("direction") == "SELL"
+            and
+            hft.get("sell_score", 0)
+            >= 65
         )
 
     return False
 
 
-def hft_conflicts(signal, hft):
-
-    direction = hft.get(
-        "direction",
-        "NEUTRAL"
-    )
+def hft_conflicts(
+    signal,
+    hft
+):
 
     if signal == "🟢 BUY":
 
-        return direction == "SELL"
+        return (
+            hft.get("direction") == "SELL"
+            and
+            hft.get("sell_score", 0)
+            >= 65
+        )
 
     if signal == "🔴 SELL":
 
-        return direction == "BUY"
+        return (
+            hft.get("direction") == "BUY"
+            and
+            hft.get("buy_score", 0)
+            >= 65
+        )
 
     return False
