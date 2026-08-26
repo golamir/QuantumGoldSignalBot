@@ -20,10 +20,20 @@ from no_trade_filter import apply_no_trade_filter
 
 # ============================================================
 # QuantumGold AI Signal Bot
-# MASTER FILTER V3.1 + MICROSTRUCTURE
+# MASTER FILTER V3.2
 #
-# GainzAlgo V2 Essential + GainzAlgo Pro integrated
-# Smart Money confirmations = SOFT / BONUS
+# V3.1 BASE + MICROSTRUCTURE
+# + COMPOSITE AI SCORE
+# + DIRECTIONAL ADX
+# + S/R TP/SL VALIDATION
+#
+# GainzAlgo V2 Essential + Pro
+# Smart Money = SOFT BONUS
+# Microstructure = SOFT CONFIRMATION
+#
+# IMPORTANT:
+# This system is OHLCV based.
+# It is NOT true exchange HFT/order-book trading.
 # ============================================================
 
 
@@ -32,7 +42,7 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 # ============================================================
-# HARD FILTERS
+# MASTER HARD FILTERS
 # ============================================================
 
 MIN_AI_SCORE = 80
@@ -44,6 +54,17 @@ TARGET_WIN_RATE = 85
 
 
 # ============================================================
+# V3.2 COMPOSITE SCORE SETTINGS
+# ============================================================
+
+COMPOSITE_SMART_WEIGHT = 0.35
+COMPOSITE_QUALITY_WEIGHT = 0.45
+COMPOSITE_MICRO_WEIGHT = 0.20
+
+MIN_COMPOSITE_SCORE = 80
+
+
+# ============================================================
 # GAINZALGO SETTINGS
 # ============================================================
 
@@ -52,7 +73,8 @@ GAINZ_V2_RSI = 70
 GAINZ_V2_DELTA = 4
 
 GAINZ_PRO_STABILITY = 0.50
-GAINZ_PRO_RSI = 50
+GAINZ_PRO_RSI_BUY = 50
+GAINZ_PRO_RSI_SELL = 50
 GAINZ_PRO_DELTA = 5
 
 GAINZ_V2_BONUS = 10
@@ -95,12 +117,44 @@ LIQUIDITY_LOOKBACK = 30
 
 
 # ============================================================
+# MICROSTRUCTURE V3.2
+# ============================================================
+
+MICROSTRUCTURE_ENABLED = True
+
+# OFF = soft confirmation only
+MICROSTRUCTURE_HARD_FILTER = False
+
+MIN_MICRO_SCORE = 55
+
+MICRO_BONUS = 5
+MICRO_PENALTY = 5
+
+
+# ============================================================
+# TP / SL SETTINGS
+# ============================================================
+
+MIN_RR = 1.20
+
+GOLD_SL_ATR = 2.0
+GOLD_TP_ATR = 3.0
+
+FOREX_SL_ATR = 2.0
+FOREX_TP_ATR = 3.0
+
+CRYPTO_SL_ATR = 3.0
+CRYPTO_TP_ATR = 5.0
+
+
+# ============================================================
 # BASIC HELPERS
 # ============================================================
 
 def is_valid_number(value):
 
     try:
+
         value = float(value)
 
         return (
@@ -109,6 +163,7 @@ def is_valid_number(value):
         )
 
     except Exception:
+
         return False
 
 
@@ -133,14 +188,8 @@ def get_price_decimals(symbol):
 
 def format_price(value, symbol):
 
-    """
-    IMPORTANT:
-    Do NOT use nested f-strings here.
-    The previous version caused:
-    SyntaxError: f-string: expecting '}'
-    """
-
     try:
+
         decimals = get_price_decimals(symbol)
         number = float(value)
 
@@ -150,6 +199,7 @@ def format_price(value, symbol):
         )
 
     except Exception:
+
         return "N/A"
 
 
@@ -170,12 +220,31 @@ def safe_float(series, index=-1):
         )
 
         if math.isfinite(value):
+
             return value
 
         return None
 
     except Exception:
+
         return None
+
+
+def clamp_score(value):
+
+    try:
+
+        return max(
+            0,
+            min(
+                100,
+                int(round(float(value)))
+            )
+        )
+
+    except Exception:
+
+        return 0
 
 
 # ============================================================
@@ -293,6 +362,7 @@ def prepare_data(symbol, interval="5m"):
     )
 
     if data is None:
+
         return None
 
     try:
@@ -307,6 +377,7 @@ def prepare_data(symbol, interval="5m"):
             open_price,
             "columns"
         ):
+
             open_price = (
                 open_price.iloc[:, 0]
             )
@@ -315,25 +386,37 @@ def prepare_data(symbol, interval="5m"):
             close,
             "columns"
         ):
-            close = close.iloc[:, 0]
+
+            close = (
+                close.iloc[:, 0]
+            )
 
         if hasattr(
             high,
             "columns"
         ):
-            high = high.iloc[:, 0]
+
+            high = (
+                high.iloc[:, 0]
+            )
 
         if hasattr(
             low,
             "columns"
         ):
-            low = low.iloc[:, 0]
+
+            low = (
+                low.iloc[:, 0]
+            )
 
         if hasattr(
             volume,
             "columns"
         ):
-            volume = volume.iloc[:, 0]
+
+            volume = (
+                volume.iloc[:, 0]
+            )
 
         open_price = (
             open_price.dropna()
@@ -465,18 +548,20 @@ def analyze_structure(
     low
 ):
 
+    neutral = {
+        "bullish_bos": False,
+        "bearish_bos": False,
+        "bullish_choch": False,
+        "bearish_choch": False
+    }
+
     try:
 
         last_i = len(close) - 2
 
         if last_i < 10:
 
-            return {
-                "bullish_bos": False,
-                "bearish_bos": False,
-                "bullish_choch": False,
-                "bearish_choch": False
-            }
+            return neutral
 
         highs, lows = (
             find_recent_swings(
@@ -543,12 +628,7 @@ def analyze_structure(
             f"Structure analysis error: {e}"
         )
 
-        return {
-            "bullish_bos": False,
-            "bearish_bos": False,
-            "bullish_choch": False,
-            "bearish_choch": False
-        }
+        return neutral
 
 
 # ============================================================
@@ -561,6 +641,11 @@ def detect_liquidity_sweep(
     low
 ):
 
+    neutral = {
+        "bullish": False,
+        "bearish": False
+    }
+
     try:
 
         i = len(close) - 2
@@ -572,10 +657,7 @@ def detect_liquidity_sweep(
 
         if i <= start:
 
-            return {
-                "bullish": False,
-                "bearish": False
-            }
+            return neutral
 
         prior_high = float(
             high.iloc[start:i].max()
@@ -618,10 +700,7 @@ def detect_liquidity_sweep(
             f"Liquidity sweep error: {e}"
         )
 
-        return {
-            "bullish": False,
-            "bearish": False
-        }
+        return neutral
 
 
 # ============================================================
@@ -635,6 +714,11 @@ def detect_fvg(
     atr_value
 ):
 
+    neutral = {
+        "bullish": False,
+        "bearish": False
+    }
+
     try:
 
         i = len(close) - 2
@@ -644,10 +728,7 @@ def detect_fvg(
             or atr_value <= 0
         ):
 
-            return {
-                "bullish": False,
-                "bearish": False
-            }
+            return neutral
 
         bullish_gap = (
             float(low.iloc[i])
@@ -678,10 +759,7 @@ def detect_fvg(
             f"FVG detection error: {e}"
         )
 
-        return {
-            "bullish": False,
-            "bearish": False
-        }
+        return neutral
 
 
 # ============================================================
@@ -696,6 +774,11 @@ def detect_displacement(
     atr_value
 ):
 
+    neutral = {
+        "bullish": False,
+        "bearish": False
+    }
+
     try:
 
         i = len(close) - 2
@@ -705,10 +788,7 @@ def detect_displacement(
             or atr_value <= 0
         ):
 
-            return {
-                "bullish": False,
-                "bearish": False
-            }
+            return neutral
 
         previous_close = float(
             close.iloc[i - 1]
@@ -723,7 +803,10 @@ def detect_displacement(
             - low.iloc[i]
         )
 
-        current_open = float(open_price.iloc[i])
+        current_open = float(
+            open_price.iloc[i]
+        )
+
         body = abs(
             current_close
             - current_open
@@ -754,10 +837,7 @@ def detect_displacement(
             f"Displacement error: {e}"
         )
 
-        return {
-            "bullish": False,
-            "bearish": False
-        }
+        return neutral
 
 
 # ============================================================
@@ -772,23 +852,25 @@ def detect_gainzalgo_v2(
     rsi_value
 ):
 
+    neutral = {
+        "buy": False,
+        "sell": False,
+        "bullish_engulfing": False,
+        "bearish_engulfing": False,
+        "stable_candle": False,
+        "rsi_buy": False,
+        "rsi_sell": False,
+        "price_decrease": False,
+        "price_increase": False
+    }
+
     try:
 
         i = len(close) - 2
 
         if i < GAINZ_V2_DELTA:
 
-            return {
-                "buy": False,
-                "sell": False,
-                "bullish_engulfing": False,
-                "bearish_engulfing": False,
-                "stable_candle": False,
-                "rsi_buy": False,
-                "rsi_sell": False,
-                "price_decrease": False,
-                "price_increase": False
-            }
+            return neutral
 
         current_open = float(
             open_price.iloc[i]
@@ -837,17 +919,7 @@ def detect_gainzalgo_v2(
 
         if true_range <= 0:
 
-            return {
-                "buy": False,
-                "sell": False,
-                "bullish_engulfing": False,
-                "bearish_engulfing": False,
-                "stable_candle": False,
-                "rsi_buy": False,
-                "rsi_sell": False,
-                "price_decrease": False,
-                "price_increase": False
-            }
+            return neutral
 
         stable_candle = (
             abs(
@@ -926,17 +998,7 @@ def detect_gainzalgo_v2(
             f"GainzAlgo V2 error: {e}"
         )
 
-        return {
-            "buy": False,
-            "sell": False,
-            "bullish_engulfing": False,
-            "bearish_engulfing": False,
-            "stable_candle": False,
-            "rsi_buy": False,
-            "rsi_sell": False,
-            "price_decrease": False,
-            "price_increase": False
-        }
+        return neutral
 
 
 # ============================================================
@@ -951,23 +1013,25 @@ def detect_gainzalgo_pro(
     rsi_value
 ):
 
+    neutral = {
+        "buy": False,
+        "sell": False,
+        "bullish_engulfing": False,
+        "bearish_engulfing": False,
+        "stable_candle": False,
+        "rsi_buy": False,
+        "rsi_sell": False,
+        "price_decrease": False,
+        "price_increase": False
+    }
+
     try:
 
         i = len(close) - 2
 
         if i < GAINZ_PRO_DELTA:
 
-            return {
-                "buy": False,
-                "sell": False,
-                "bullish_engulfing": False,
-                "bearish_engulfing": False,
-                "stable_candle": False,
-                "rsi_buy": False,
-                "rsi_sell": False,
-                "price_decrease": False,
-                "price_increase": False
-            }
+            return neutral
 
         current_open = float(
             open_price.iloc[i]
@@ -1016,17 +1080,7 @@ def detect_gainzalgo_pro(
 
         if true_range <= 0:
 
-            return {
-                "buy": False,
-                "sell": False,
-                "bullish_engulfing": False,
-                "bearish_engulfing": False,
-                "stable_candle": False,
-                "rsi_buy": False,
-                "rsi_sell": False,
-                "price_decrease": False,
-                "price_increase": False
-            }
+            return neutral
 
         stable_candle = (
             abs(
@@ -1048,13 +1102,15 @@ def detect_gainzalgo_pro(
             and current_close < previous_open
         )
 
+        # V3.2 corrected directional RSI logic
         rsi_buy = (
-            rsi_value < GAINZ_PRO_RSI
+            rsi_value > GAINZ_PRO_RSI_BUY
+            and rsi_value < 70
         )
 
         rsi_sell = (
-            rsi_value
-            > 100 - GAINZ_PRO_RSI
+            rsi_value < GAINZ_PRO_RSI_SELL
+            and rsi_value > 30
         )
 
         close_delta = float(
@@ -1105,144 +1161,577 @@ def detect_gainzalgo_pro(
             f"GainzAlgo Pro error: {e}"
         )
 
-        return {
-            "buy": False,
-            "sell": False,
-            "bullish_engulfing": False,
-            "bearish_engulfing": False,
-            "stable_candle": False,
-            "rsi_buy": False,
-            "rsi_sell": False,
-            "price_decrease": False,
-            "price_increase": False
-        }
-
-
-# ============================================================
-# V3.1 MICROSTRUCTURE / HFT-STYLE LAYER
-# ============================================================
-# OHLCV-based microstructure. This is NOT true exchange order-book HFT.
-# True HFT requires tick/order-book/bid-ask data from a suitable feed.
-
-MICROSTRUCTURE_ENABLED = True
-MICROSTRUCTURE_HARD_FILTER = False
-MIN_MICRO_SCORE = 55
-MICRO_BONUS = 5
-MICRO_PENALTY = 5
-
-
-def _safe_ratio(numerator, denominator, default=0.0):
-    try:
-        d = float(denominator)
-        if abs(d) < 1e-12:
-            return default
-        return float(numerator) / d
-    except Exception:
-        return default
-
-
-def analyze_microstructure(open_price, close, high, low, volume, atr_value):
-    """Analyze the last completed candle and prior M5 candles only."""
-    neutral = {
-        "buy_score": 0, "sell_score": 0, "score": 50,
-        "direction": "NEUTRAL", "impulse": 0.0, "velocity": 0.0,
-        "range_ratio": 1.0, "volume_ratio": 0.0,
-        "breakout_buy": False, "breakout_sell": False,
-        "fake_breakout_buy": False, "fake_breakout_sell": False,
-        "rejection_buy": False, "rejection_sell": False,
-        "pullback_buy": False, "pullback_sell": False,
-        "reason": "Microstructure unavailable",
-    }
-    try:
-        i = len(close) - 2
-        atr = float(atr_value)
-        if i < 25 or atr <= 0:
-            return neutral
-        o, c = float(open_price.iloc[i]), float(close.iloc[i])
-        h, l = float(high.iloc[i]), float(low.iloc[i])
-        prev_c = float(close.iloc[i - 1])
-        prev_o = float(open_price.iloc[i - 1])
-        if h <= l:
-            return neutral
-        start = max(0, i - 20)
-        prev_high20 = float(high.iloc[start:i].max())
-        prev_low20 = float(low.iloc[start:i].min())
-        ranges = (high - low).iloc[start:i].astype(float)
-        avg_range = float(ranges.median()) if len(ranges) else 0.0
-        vols = volume.iloc[start:i].astype(float)
-        avg_volume = float(vols.mean()) if len(vols) else 0.0
-        current_volume = float(volume.iloc[i])
-        candle_range = h - l
-        body = abs(c - o)
-        body_ratio = _safe_ratio(body, candle_range)
-        close_location = _safe_ratio(c - l, candle_range)
-        upper_wick = h - max(o, c)
-        lower_wick = min(o, c) - l
-        impulse = _safe_ratio(c - o, atr)
-        velocity = _safe_ratio(c - prev_c, atr)
-        range_ratio = _safe_ratio(candle_range, avg_range, 1.0)
-        volume_ratio = _safe_ratio(current_volume, avg_volume, 0.0)
-        breakout_buy = c > prev_high20
-        breakout_sell = c < prev_low20
-        fake_breakout_buy = l < prev_low20 and c > prev_low20
-        fake_breakout_sell = h > prev_high20 and c < prev_high20
-        rejection_buy = lower_wick >= body * 1.2 and close_location >= 0.65
-        rejection_sell = upper_wick >= body * 1.2 and close_location <= 0.35
-        pullback_buy = (prev_c - prev_o) < 0 and (c - o) > 0 and c > prev_c
-        pullback_sell = (prev_c - prev_o) > 0 and (c - o) < 0 and c < prev_c
-        buy = sell = 0
-        reasons = []
-        if impulse >= 0.35 and velocity > 0:
-            buy += 18; reasons.append("bullish impulse")
-        elif impulse <= -0.35 and velocity < 0:
-            sell += 18; reasons.append("bearish impulse")
-        if velocity >= 0.20: buy += 12
-        elif velocity <= -0.20: sell += 12
-        if body_ratio >= 0.55 and close_location >= 0.70: buy += 12
-        elif body_ratio >= 0.55 and close_location <= 0.30: sell += 12
-        if range_ratio >= 1.25:
-            if c > o: buy += 10
-            elif c < o: sell += 10
-        if volume_ratio >= 1.20:
-            if c > o: buy += 12
-            elif c < o: sell += 12
-        elif volume_ratio >= 1.05:
-            if c > o: buy += 5
-            elif c < o: sell += 5
-        if breakout_buy: buy += 15; reasons.append("20-bar upside breakout")
-        if breakout_sell: sell += 15; reasons.append("20-bar downside breakout")
-        if fake_breakout_buy: buy += 10; sell = max(0, sell - 8); reasons.append("bullish liquidity sweep")
-        if fake_breakout_sell: sell += 10; buy = max(0, buy - 8); reasons.append("bearish liquidity sweep")
-        if rejection_buy: buy += 8
-        if rejection_sell: sell += 8
-        if pullback_buy: buy += 8
-        if pullback_sell: sell += 8
-        buy, sell = max(0, min(100, buy)), max(0, min(100, sell))
-        score = int(max(0, min(100, 50 + (buy - sell) * 0.5)))
-        if buy > sell and buy >= MIN_MICRO_SCORE: direction = "BUY"
-        elif sell > buy and sell >= MIN_MICRO_SCORE: direction = "SELL"
-        else: direction = "NEUTRAL"
-        return {
-            "buy_score": buy, "sell_score": sell, "score": score,
-            "direction": direction, "impulse": impulse, "velocity": velocity,
-            "range_ratio": range_ratio, "volume_ratio": volume_ratio,
-            "breakout_buy": breakout_buy, "breakout_sell": breakout_sell,
-            "fake_breakout_buy": fake_breakout_buy, "fake_breakout_sell": fake_breakout_sell,
-            "rejection_buy": rejection_buy, "rejection_sell": rejection_sell,
-            "pullback_buy": pullback_buy, "pullback_sell": pullback_sell,
-            "reason": ", ".join(reasons) if reasons else "No strong microstructure event",
-        }
-    except Exception as e:
-        print(f"Microstructure error: {e}")
         return neutral
 
 
-def microstructure_confirms(signal, micro):
+# ============================================================
+# MICROSTRUCTURE V3.2
+# ============================================================
+
+def _safe_ratio(
+    numerator,
+    denominator,
+    default=0.0
+):
+
+    try:
+
+        d = float(denominator)
+
+        if abs(d) < 1e-12:
+
+            return default
+
+        return (
+            float(numerator)
+            / d
+        )
+
+    except Exception:
+
+        return default
+
+
+def analyze_microstructure(
+    open_price,
+    close,
+    high,
+    low,
+    volume,
+    atr_value
+):
+
+    neutral = {
+        "buy_score": 0,
+        "sell_score": 0,
+        "score": 50,
+        "direction": "NEUTRAL",
+        "impulse": 0.0,
+        "velocity": 0.0,
+        "range_ratio": 1.0,
+        "volume_ratio": 0.0,
+        "breakout_buy": False,
+        "breakout_sell": False,
+        "fake_breakout_buy": False,
+        "fake_breakout_sell": False,
+        "rejection_buy": False,
+        "rejection_sell": False,
+        "pullback_buy": False,
+        "pullback_sell": False,
+        "reason": "Microstructure unavailable"
+    }
+
+    try:
+
+        i = len(close) - 2
+
+        atr = float(
+            atr_value
+        )
+
+        if (
+            i < 25
+            or atr <= 0
+        ):
+
+            return neutral
+
+        o = float(
+            open_price.iloc[i]
+        )
+
+        c = float(
+            close.iloc[i]
+        )
+
+        h = float(
+            high.iloc[i]
+        )
+
+        l = float(
+            low.iloc[i]
+        )
+
+        prev_c = float(
+            close.iloc[i - 1]
+        )
+
+        prev_o = float(
+            open_price.iloc[i - 1]
+        )
+
+        if h <= l:
+
+            return neutral
+
+        start = max(
+            0,
+            i - 20
+        )
+
+        prev_high20 = float(
+            high.iloc[start:i].max()
+        )
+
+        prev_low20 = float(
+            low.iloc[start:i].min()
+        )
+
+        ranges = (
+            high - low
+        ).iloc[
+            start:i
+        ].astype(float)
+
+        avg_range = (
+            float(ranges.median())
+            if len(ranges)
+            else 0.0
+        )
+
+        vols = (
+            volume.iloc[start:i]
+            .astype(float)
+        )
+
+        avg_volume = (
+            float(vols.mean())
+            if len(vols)
+            else 0.0
+        )
+
+        current_volume = float(
+            volume.iloc[i]
+        )
+
+        candle_range = h - l
+
+        body = abs(
+            c - o
+        )
+
+        body_ratio = _safe_ratio(
+            body,
+            candle_range
+        )
+
+        close_location = _safe_ratio(
+            c - l,
+            candle_range
+        )
+
+        upper_wick = (
+            h - max(o, c)
+        )
+
+        lower_wick = (
+            min(o, c) - l
+        )
+
+        impulse = _safe_ratio(
+            c - o,
+            atr
+        )
+
+        velocity = _safe_ratio(
+            c - prev_c,
+            atr
+        )
+
+        range_ratio = _safe_ratio(
+            candle_range,
+            avg_range,
+            1.0
+        )
+
+        volume_ratio = _safe_ratio(
+            current_volume,
+            avg_volume,
+            0.0
+        )
+
+        breakout_buy = (
+            c > prev_high20
+        )
+
+        breakout_sell = (
+            c < prev_low20
+        )
+
+        fake_breakout_buy = (
+            l < prev_low20
+            and c > prev_low20
+        )
+
+        fake_breakout_sell = (
+            h > prev_high20
+            and c < prev_high20
+        )
+
+        rejection_buy = (
+            lower_wick >= body * 1.2
+            and close_location >= 0.65
+        )
+
+        rejection_sell = (
+            upper_wick >= body * 1.2
+            and close_location <= 0.35
+        )
+
+        pullback_buy = (
+            prev_c < prev_o
+            and c > o
+            and c > prev_c
+        )
+
+        pullback_sell = (
+            prev_c > prev_o
+            and c < o
+            and c < prev_c
+        )
+
+        buy = 0
+        sell = 0
+
+        reasons = []
+
+        # ----------------------------------------------------
+        # IMPULSE
+        # ----------------------------------------------------
+
+        if (
+            impulse >= 0.35
+            and velocity > 0
+        ):
+
+            buy += 18
+
+            reasons.append(
+                "bullish impulse"
+            )
+
+        elif (
+            impulse <= -0.35
+            and velocity < 0
+        ):
+
+            sell += 18
+
+            reasons.append(
+                "bearish impulse"
+            )
+
+        # ----------------------------------------------------
+        # VELOCITY
+        # ----------------------------------------------------
+
+        if velocity >= 0.20:
+
+            buy += 12
+
+        elif velocity <= -0.20:
+
+            sell += 12
+
+        # ----------------------------------------------------
+        # BODY / CLOSE LOCATION
+        # ----------------------------------------------------
+
+        if (
+            body_ratio >= 0.55
+            and close_location >= 0.70
+        ):
+
+            buy += 12
+
+        elif (
+            body_ratio >= 0.55
+            and close_location <= 0.30
+        ):
+
+            sell += 12
+
+        # ----------------------------------------------------
+        # RANGE EXPANSION
+        # ----------------------------------------------------
+
+        if range_ratio >= 1.25:
+
+            if c > o:
+
+                buy += 10
+
+            elif c < o:
+
+                sell += 10
+
+        # ----------------------------------------------------
+        # VOLUME
+        # ----------------------------------------------------
+
+        if volume_ratio >= 1.20:
+
+            if c > o:
+
+                buy += 12
+
+            elif c < o:
+
+                sell += 12
+
+        elif volume_ratio >= 1.05:
+
+            if c > o:
+
+                buy += 5
+
+            elif c < o:
+
+                sell += 5
+
+        # ----------------------------------------------------
+        # BREAKOUT
+        # ----------------------------------------------------
+
+        if breakout_buy:
+
+            buy += 15
+
+            reasons.append(
+                "20-bar upside breakout"
+            )
+
+        if breakout_sell:
+
+            sell += 15
+
+            reasons.append(
+                "20-bar downside breakout"
+            )
+
+        # ----------------------------------------------------
+        # LIQUIDITY SWEEP
+        # ----------------------------------------------------
+
+        if fake_breakout_buy:
+
+            buy += 10
+
+            sell = max(
+                0,
+                sell - 8
+            )
+
+            reasons.append(
+                "bullish liquidity sweep"
+            )
+
+        if fake_breakout_sell:
+
+            sell += 10
+
+            buy = max(
+                0,
+                buy - 8
+            )
+
+            reasons.append(
+                "bearish liquidity sweep"
+            )
+
+        # ----------------------------------------------------
+        # REJECTION
+        # ----------------------------------------------------
+
+        if rejection_buy:
+
+            buy += 8
+
+        if rejection_sell:
+
+            sell += 8
+
+        # ----------------------------------------------------
+        # PULLBACK
+        # ----------------------------------------------------
+
+        if pullback_buy:
+
+            buy += 8
+
+        if pullback_sell:
+
+            sell += 8
+
+        buy = max(
+            0,
+            min(
+                100,
+                buy
+            )
+        )
+
+        sell = max(
+            0,
+            min(
+                100,
+                sell
+            )
+        )
+
+        score = int(
+            max(
+                0,
+                min(
+                    100,
+                    50
+                    + (buy - sell)
+                    * 0.5
+                )
+            )
+        )
+
+        if (
+            buy > sell
+            and buy >= MIN_MICRO_SCORE
+        ):
+
+            direction = "BUY"
+
+        elif (
+            sell > buy
+            and sell >= MIN_MICRO_SCORE
+        ):
+
+            direction = "SELL"
+
+        else:
+
+            direction = "NEUTRAL"
+
+        return {
+            "buy_score": buy,
+            "sell_score": sell,
+            "score": score,
+            "direction": direction,
+            "impulse": impulse,
+            "velocity": velocity,
+            "range_ratio": range_ratio,
+            "volume_ratio": volume_ratio,
+            "breakout_buy": breakout_buy,
+            "breakout_sell": breakout_sell,
+            "fake_breakout_buy": fake_breakout_buy,
+            "fake_breakout_sell": fake_breakout_sell,
+            "rejection_buy": rejection_buy,
+            "rejection_sell": rejection_sell,
+            "pullback_buy": pullback_buy,
+            "pullback_sell": pullback_sell,
+            "reason": (
+                ", ".join(reasons)
+                if reasons
+                else "No strong microstructure event"
+            )
+        }
+
+    except Exception as e:
+
+        print(
+            f"Microstructure error: {e}"
+        )
+
+        return neutral
+
+
+def microstructure_confirms(
+    signal,
+    micro
+):
+
     if signal == "🟢 BUY":
-        return micro.get("direction") == "BUY" or micro.get("buy_score", 0) >= MIN_MICRO_SCORE
+
+        return (
+            micro.get("direction")
+            == "BUY"
+            or
+            micro.get(
+                "buy_score",
+                0
+            )
+            >= MIN_MICRO_SCORE
+        )
+
     if signal == "🔴 SELL":
-        return micro.get("direction") == "SELL" or micro.get("sell_score", 0) >= MIN_MICRO_SCORE
+
+        return (
+            micro.get("direction")
+            == "SELL"
+            or
+            micro.get(
+                "sell_score",
+                0
+            )
+            >= MIN_MICRO_SCORE
+        )
+
     return False
+
+
+# ============================================================
+# DIRECTIONAL ADX
+# ============================================================
+
+def directional_adx_confirmation(
+    signal,
+    adx_indicator
+):
+
+    try:
+
+        i = -2
+
+        adx_value = safe_float(
+            adx_indicator.adx(),
+            i
+        )
+
+        plus_di = safe_float(
+            adx_indicator.adx_pos(),
+            i
+        )
+
+        minus_di = safe_float(
+            adx_indicator.adx_neg(),
+            i
+        )
+
+        if any(
+            x is None
+            for x in [
+                adx_value,
+                plus_di,
+                minus_di
+            ]
+        ):
+
+            return False
+
+        if adx_value < MIN_ADX:
+
+            return False
+
+        if signal == "🟢 BUY":
+
+            return plus_di > minus_di
+
+        if signal == "🔴 SELL":
+
+            return minus_di > plus_di
+
+        return False
+
+    except Exception:
+
+        return False
 
 
 # ============================================================
@@ -1327,7 +1816,7 @@ def validate_trade_levels(
 
         rr = reward / risk
 
-        if rr < 1.20:
+        if rr < MIN_RR:
 
             return (
                 False,
@@ -1348,7 +1837,219 @@ def validate_trade_levels(
 
 
 # ============================================================
-# V3 QUALITY SCORE
+# S/R AWARE TP / SL
+# ============================================================
+
+def build_trade_levels(
+    signal,
+    price,
+    atr_value,
+    support,
+    resistance,
+    symbol
+):
+
+    try:
+
+        if symbol == "GC=F":
+
+            sl_mult = GOLD_SL_ATR
+            tp_mult = GOLD_TP_ATR
+
+        elif symbol in [
+            "BTC-USD",
+            "ETH-USD",
+            "SOL-USD",
+            "BNB-USD"
+        ]:
+
+            sl_mult = CRYPTO_SL_ATR
+            tp_mult = CRYPTO_TP_ATR
+
+        else:
+
+            sl_mult = FOREX_SL_ATR
+            tp_mult = FOREX_TP_ATR
+
+        atr_risk = (
+            atr_value * sl_mult
+        )
+
+        if signal == "🟢 BUY":
+
+            atr_sl = (
+                price - atr_risk
+            )
+
+            atr_tp1 = (
+                price + atr_value
+            )
+
+            atr_tp2 = (
+                price + atr_value * 2
+            )
+
+            atr_tp3 = (
+                price
+                + atr_value * tp_mult
+            )
+
+            # S/R-aware protection
+            if (
+                is_valid_number(support)
+                and support < price
+            ):
+
+                sr_sl = (
+                    support
+                    - atr_value * 0.15
+                )
+
+                stop_loss = max(
+                    atr_sl,
+                    sr_sl
+                )
+
+            else:
+
+                stop_loss = atr_sl
+
+            tp1 = atr_tp1
+            tp2 = atr_tp2
+
+            if (
+                is_valid_number(resistance)
+                and resistance > price
+            ):
+
+                # Never place TP3 below the required ATR target.
+                tp3 = max(
+                    atr_tp3,
+                    resistance
+                )
+
+            else:
+
+                tp3 = atr_tp3
+
+        else:
+
+            atr_sl = (
+                price + atr_risk
+            )
+
+            atr_tp1 = (
+                price - atr_value
+            )
+
+            atr_tp2 = (
+                price - atr_value * 2
+            )
+
+            atr_tp3 = (
+                price
+                - atr_value * tp_mult
+            )
+
+            if (
+                is_valid_number(resistance)
+                and resistance > price
+            ):
+
+                sr_sl = (
+                    resistance
+                    + atr_value * 0.15
+                )
+
+                stop_loss = min(
+                    atr_sl,
+                    sr_sl
+                )
+
+            else:
+
+                stop_loss = atr_sl
+
+            tp1 = atr_tp1
+            tp2 = atr_tp2
+
+            if (
+                is_valid_number(support)
+                and support < price
+            ):
+
+                tp3 = min(
+                    atr_tp3,
+                    support
+                )
+
+            else:
+
+                tp3 = atr_tp3
+
+        return (
+            stop_loss,
+            tp1,
+            tp2,
+            tp3
+        )
+
+    except Exception:
+
+        if signal == "🟢 BUY":
+
+            stop_loss = (
+                price
+                - atr_value * 2
+            )
+
+            tp1 = (
+                price
+                + atr_value
+            )
+
+            tp2 = (
+                price
+                + atr_value * 2
+            )
+
+            tp3 = (
+                price
+                + atr_value * 3
+            )
+
+        else:
+
+            stop_loss = (
+                price
+                + atr_value * 2
+            )
+
+            tp1 = (
+                price
+                - atr_value
+            )
+
+            tp2 = (
+                price
+                - atr_value * 2
+            )
+
+            tp3 = (
+                price
+                - atr_value * 3
+            )
+
+        return (
+            stop_loss,
+            tp1,
+            tp2,
+            tp3
+        )
+
+
+# ============================================================
+# QUALITY SCORE V3.2
 # ============================================================
 
 def calculate_quality_score(
@@ -1368,7 +2069,8 @@ def calculate_quality_score(
     displacement_confirmed=False,
     dxy_confirmed=False,
     gainz_v2_confirmed=False,
-    gainz_pro_confirmed=False
+    gainz_pro_confirmed=False,
+    directional_adx=False
 ):
 
     score = 0
@@ -1381,33 +2083,57 @@ def calculate_quality_score(
         signal == "🔴 SELL"
     )
 
+    # --------------------------------------------------------
+    # EMA
+    # --------------------------------------------------------
+
     if (
         (buy and ema_bullish)
         or
         (sell and not ema_bullish)
     ):
+
         score += 15
+
+    # --------------------------------------------------------
+    # MACD
+    # --------------------------------------------------------
 
     if (
         (buy and macd_bullish)
         or
         (sell and not macd_bullish)
     ):
+
         score += 15
+
+    # --------------------------------------------------------
+    # M15
+    # --------------------------------------------------------
 
     if (
         (buy and m15_bullish)
         or
         (sell and not m15_bullish)
     ):
+
         score += 10
+
+    # --------------------------------------------------------
+    # H1
+    # --------------------------------------------------------
 
     if (
         (buy and h1_bullish)
         or
         (sell and not h1_bullish)
     ):
+
         score += 10
+
+    # --------------------------------------------------------
+    # ADX
+    # --------------------------------------------------------
 
     if adx_value >= 30:
 
@@ -1421,24 +2147,46 @@ def calculate_quality_score(
 
         score += 5
 
+    # Directional DI confirmation
+    if directional_adx:
+
+        score += 5
+
+    # --------------------------------------------------------
+    # VOLUME
+    # --------------------------------------------------------
+
     if volume_confirmed:
+
         score += 10
+
+    # --------------------------------------------------------
+    # RSI
+    # --------------------------------------------------------
 
     if buy:
 
         if 45 < rsi_value < 70:
+
             score += 10
 
         elif 40 < rsi_value < 75:
+
             score += 5
 
     elif sell:
 
         if 30 < rsi_value < 55:
+
             score += 10
 
         elif 25 < rsi_value < 60:
+
             score += 5
+
+    # --------------------------------------------------------
+    # NEWS
+    # --------------------------------------------------------
 
     if news_risk == "HIGH":
 
@@ -1452,6 +2200,10 @@ def calculate_quality_score(
 
         score += 10
 
+    # --------------------------------------------------------
+    # ENTRY
+    # --------------------------------------------------------
+
     if entry_quality == "A":
 
         score += 10
@@ -1464,38 +2216,79 @@ def calculate_quality_score(
 
         score -= 10
 
+    # --------------------------------------------------------
+    # SMART MONEY
+    # --------------------------------------------------------
+
     if structure_confirmed:
+
         score += 5
 
     if liquidity_confirmed:
+
         score += 5
 
     if fvg_confirmed:
+
         score += 5
 
     if displacement_confirmed:
+
         score += 5
 
     if dxy_confirmed:
+
         score += 5
 
+    # --------------------------------------------------------
+    # GAINZ
+    # --------------------------------------------------------
+
     if gainz_v2_confirmed:
+
         score += GAINZ_V2_BONUS
 
     if gainz_pro_confirmed:
+
         score += GAINZ_PRO_BONUS
 
-    return max(
-        0,
-        min(
-            100,
-            int(score)
-        )
-    )
+    return clamp_score(score)
 
 
 # ============================================================
-# MASTER V3 HARD FILTER
+# COMPOSITE AI SCORE
+# ============================================================
+
+def calculate_composite_ai_score(
+    smart_score,
+    quality_score,
+    micro_score
+):
+
+    try:
+
+        composite = (
+            float(smart_score)
+            * COMPOSITE_SMART_WEIGHT
+            +
+            float(quality_score)
+            * COMPOSITE_QUALITY_WEIGHT
+            +
+            float(micro_score)
+            * COMPOSITE_MICRO_WEIGHT
+        )
+
+        return clamp_score(
+            composite
+        )
+
+    except Exception:
+
+        return 0
+
+
+# ============================================================
+# MASTER HARD FILTER V3.2
 # ============================================================
 
 def master_quality_filter(
@@ -1508,7 +2301,8 @@ def master_quality_filter(
     trend_aligned,
     rsi_valid,
     news_risk,
-    tp_sl_valid
+    tp_sl_valid,
+    directional_adx=False
 ):
 
     if signal not in [
@@ -1549,6 +2343,13 @@ def master_quality_filter(
             f"ADX below {MIN_ADX}"
         )
 
+    if not directional_adx:
+
+        return (
+            False,
+            "ADX direction not confirmed"
+        )
+
     if not volume_confirmed:
 
         return (
@@ -1586,12 +2387,12 @@ def master_quality_filter(
 
     return (
         True,
-        "ALL MASTER V3 HARD FILTERS PASSED"
+        "ALL MASTER V3.2 HARD FILTERS PASSED"
     )
 
 
 # ============================================================
-# MARKET ANALYSIS
+# ANALYZE MARKET
 # ============================================================
 
 def analyze_market(
@@ -1602,12 +2403,22 @@ def analyze_market(
     try:
 
         print(
-            f"\n{'=' * 60}\n"
+            f"\n{'=' * 65}\n"
             f"Analyzing {name}\n"
-            f"{'=' * 60}"
+            f"{'=' * 65}"
         )
 
-        if is_weekend() and symbol not in {x[0] for x in CRYPTO_MARKETS}:
+        # ====================================================
+        # WEEKEND
+        # ====================================================
+
+        if (
+            is_weekend()
+            and symbol not in {
+                x[0]
+                for x in CRYPTO_MARKETS
+            }
+        ):
 
             print(
                 f"{name}: "
@@ -1674,6 +2485,10 @@ def analyze_market(
 
             return None
 
+        # ====================================================
+        # DXY
+        # ====================================================
+
         dxy = None
 
         if symbol == "GC=F":
@@ -1718,6 +2533,7 @@ def analyze_market(
             )
 
         if price is None:
+
             return None
 
         # ====================================================
@@ -1738,13 +2554,24 @@ def analyze_market(
 
             return None
 
-        support = float(
-            sr["support"]
-        )
+        try:
 
-        resistance = float(
-            sr["resistance"]
-        )
+            support = float(
+                sr["support"]
+            )
+
+            resistance = float(
+                sr["resistance"]
+            )
+
+        except Exception:
+
+            print(
+                f"{name}: "
+                f"Invalid S/R data"
+            )
+
+            return None
 
         # ====================================================
         # INDICATORS
@@ -1820,6 +2647,16 @@ def analyze_market(
             -2
         )
 
+        plus_di = safe_float(
+            adx.adx_pos(),
+            -2
+        )
+
+        minus_di = safe_float(
+            adx.adx_neg(),
+            -2
+        )
+
         if any(
             x is None
             for x in [
@@ -1829,7 +2666,9 @@ def analyze_market(
                 m,
                 ms,
                 atr_value,
-                adx_value
+                adx_value,
+                plus_di,
+                minus_di
             ]
         ):
 
@@ -1839,58 +2678,6 @@ def analyze_market(
             )
 
             return None
-
-        # ====================================================
-        # GAINZALGO
-        # ====================================================
-
-        gainz_v2 = detect_gainzalgo_v2(
-            open_price,
-            close,
-            high,
-            low,
-            r
-        )
-
-        gainz_v2_buy = (
-            gainz_v2["buy"]
-        )
-
-        gainz_v2_sell = (
-            gainz_v2["sell"]
-        )
-
-        gainz_pro = detect_gainzalgo_pro(
-            open_price,
-            close,
-            high,
-            low,
-            r
-        )
-
-        gainz_pro_buy = (
-            gainz_pro["buy"]
-        )
-
-        gainz_pro_sell = (
-            gainz_pro["sell"]
-        )
-
-        print(
-            f"{name}: "
-            f"Gainz V2 BUY="
-            f"{gainz_v2_buy} "
-            f"SELL="
-            f"{gainz_v2_sell}"
-        )
-
-        print(
-            f"{name}: "
-            f"Gainz Pro BUY="
-            f"{gainz_pro_buy} "
-            f"SELL="
-            f"{gainz_pro_sell}"
-        )
 
         # ====================================================
         # TREND
@@ -1932,6 +2719,7 @@ def analyze_market(
             m15_e50 is None
             or m15_e200 is None
         ):
+
             return None
 
         m15_bullish = (
@@ -1966,6 +2754,7 @@ def analyze_market(
             h1_e50 is None
             or h1_e200 is None
         ):
+
             return None
 
         h1_bullish = (
@@ -1979,7 +2768,10 @@ def analyze_market(
         v = volume.fillna(0)
 
         current_volume = (
-            safe_float(v, -2)
+            safe_float(
+                v,
+                -2
+            )
             or 0.0
         )
 
@@ -2010,15 +2802,63 @@ def analyze_market(
         )
 
         # ====================================================
-        # V3.1 MICROSTRUCTURE / HFT-STYLE ANALYSIS
+        # GAINZALGO
         # ====================================================
-        micro = analyze_microstructure(
-            open_price, close, high, low, volume, atr_value
+
+        gainz_v2 = detect_gainzalgo_v2(
+            open_price,
+            close,
+            high,
+            low,
+            r
         )
+
+        gainz_pro = detect_gainzalgo_pro(
+            open_price,
+            close,
+            high,
+            low,
+            r
+        )
+
+        gainz_v2_buy = gainz_v2["buy"]
+        gainz_v2_sell = gainz_v2["sell"]
+
+        gainz_pro_buy = gainz_pro["buy"]
+        gainz_pro_sell = gainz_pro["sell"]
+
         print(
-            f"{name}: Microstructure BUY={micro['buy_score']} "
-            f"SELL={micro['sell_score']} DIR={micro['direction']} "
-            f"VOLx={micro['volume_ratio']:.2f} RANGEx={micro['range_ratio']:.2f}"
+            f"{name}: "
+            f"Gainz V2 BUY={gainz_v2_buy} "
+            f"SELL={gainz_v2_sell}"
+        )
+
+        print(
+            f"{name}: "
+            f"Gainz Pro BUY={gainz_pro_buy} "
+            f"SELL={gainz_pro_sell}"
+        )
+
+        # ====================================================
+        # MICROSTRUCTURE
+        # ====================================================
+
+        micro = analyze_microstructure(
+            open_price,
+            close,
+            high,
+            low,
+            volume,
+            atr_value
+        )
+
+        print(
+            f"{name}: "
+            f"Micro BUY={micro['buy_score']} "
+            f"SELL={micro['sell_score']} "
+            f"DIR={micro['direction']} "
+            f"VOLx={micro['volume_ratio']:.2f} "
+            f"RANGEx={micro['range_ratio']:.2f}"
         )
 
         # ====================================================
@@ -2053,86 +2893,166 @@ def analyze_market(
         )
 
         # ====================================================
-        # BUY / SELL SCORING
+        # DIRECTIONAL CANDIDATE SCORING
         # ====================================================
 
         buy_score = 0
         sell_score = 0
 
+        # ----------------------------------------------------
+        # EMA
+        # ----------------------------------------------------
+
         if ema_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
+
+        # ----------------------------------------------------
+        # MACD
+        # ----------------------------------------------------
 
         if macd_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
+
+        # ----------------------------------------------------
+        # M15
+        # ----------------------------------------------------
 
         if m15_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
+
+        # ----------------------------------------------------
+        # H1
+        # ----------------------------------------------------
 
         if h1_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
+        # ----------------------------------------------------
+        # RSI
+        # ----------------------------------------------------
+
         if 45 < r < 70:
+
             buy_score += 10
 
         if 30 < r < 55:
+
             sell_score += 10
 
-        if adx_value >= 25:
-            buy_score += 10
-            sell_score += 10
+        # ----------------------------------------------------
+        # DIRECTIONAL ADX
+        # ----------------------------------------------------
+
+        if adx_value >= MIN_ADX:
+
+            if plus_di > minus_di:
+
+                buy_score += 10
+
+            elif minus_di > plus_di:
+
+                sell_score += 10
+
+        # ----------------------------------------------------
+        # GAINZ V2
+        # ----------------------------------------------------
 
         if gainz_v2_buy:
+
             buy_score += GAINZ_V2_BONUS
 
         if gainz_v2_sell:
+
             sell_score += GAINZ_V2_BONUS
 
+        # ----------------------------------------------------
+        # GAINZ PRO
+        # ----------------------------------------------------
+
         if gainz_pro_buy:
+
             buy_score += GAINZ_PRO_BONUS
 
         if gainz_pro_sell:
+
             sell_score += GAINZ_PRO_BONUS
+
+        # ----------------------------------------------------
+        # SMART MONEY
+        # ----------------------------------------------------
 
         if (
             structure["bullish_bos"]
             or structure["bullish_choch"]
         ):
+
             buy_score += 10
 
         if (
             structure["bearish_bos"]
             or structure["bearish_choch"]
         ):
+
             sell_score += 10
 
         if liquidity["bullish"]:
+
             buy_score += 10
 
         if liquidity["bearish"]:
+
             sell_score += 10
 
         if displacement["bullish"]:
+
             buy_score += 5
 
         if displacement["bearish"]:
+
             sell_score += 5
 
         if fvg["bullish"]:
+
             buy_score += 5
 
         if fvg["bearish"]:
+
             sell_score += 5
 
         # ====================================================
-        # SIGNAL CANDIDATE
+        # MICROSTRUCTURE SOFT SCORE
+        # ====================================================
+
+        if micro["direction"] == "BUY":
+
+            buy_score += MICRO_BONUS
+
+        elif micro["direction"] == "SELL":
+
+            sell_score += MICRO_BONUS
+
+        # ====================================================
+        # CANDIDATE
         # ====================================================
 
         if (
@@ -2142,8 +3062,7 @@ def analyze_market(
 
             signal = "🟢 BUY"
 
-            preliminary = min(
-                100,
+            preliminary = clamp_score(
                 buy_score
             )
 
@@ -2154,8 +3073,7 @@ def analyze_market(
 
             signal = "🔴 SELL"
 
-            preliminary = min(
-                100,
+            preliminary = clamp_score(
                 sell_score
             )
 
@@ -2176,6 +3094,26 @@ def analyze_market(
             f"BUY={buy_score} "
             f"SELL={sell_score}"
         )
+
+        # ====================================================
+        # DIRECTIONAL ADX
+        # ====================================================
+
+        directional_adx = (
+            directional_adx_confirmation(
+                signal,
+                adx
+            )
+        )
+
+        if not directional_adx:
+
+            print(
+                f"{name}: "
+                f"Directional ADX rejected"
+            )
+
+            return None
 
         # ====================================================
         # GAINZ CONFIRMATION
@@ -2202,7 +3140,7 @@ def analyze_market(
             )
 
         # ====================================================
-        # ENTRY
+        # ENTRY FILTER
         # ====================================================
 
         entry = check_entry(
@@ -2266,6 +3204,15 @@ def analyze_market(
                 and not h1_bullish
             )
 
+        if not trend_aligned:
+
+            print(
+                f"{name}: "
+                f"Trend alignment failed"
+            )
+
+            return None
+
         # ====================================================
         # SMART MONEY DIRECTION
         # ====================================================
@@ -2309,76 +3256,22 @@ def analyze_market(
             )
 
         # ====================================================
-        # TP / SL MULTIPLIERS
-        # ====================================================
-
-        if symbol == "GC=F":
-
-            sl_mult = 2.0
-            tp_mult = 3.0
-
-        elif symbol in [
-            "BTC-USD",
-            "ETH-USD",
-            "SOL-USD",
-            "BNB-USD"
-        ]:
-
-            sl_mult = 3.0
-            tp_mult = 5.0
-
-        else:
-
-            sl_mult = 2.0
-            tp_mult = 3.0
-
-        # ====================================================
         # TP / SL
         # ====================================================
 
-        if signal == "🟢 BUY":
-
-            stop_loss = (
-                price
-                - atr_value * sl_mult
-            )
-
-            tp1 = (
-                price
-                + atr_value
-            )
-
-            tp2 = (
-                price
-                + atr_value * 2
-            )
-
-            tp3 = (
-                price
-                + atr_value * tp_mult
-            )
-
-        else:
-
-            stop_loss = (
-                price
-                + atr_value * sl_mult
-            )
-
-            tp1 = (
-                price
-                - atr_value
-            )
-
-            tp2 = (
-                price
-                - atr_value * 2
-            )
-
-            tp3 = (
-                price
-                - atr_value * tp_mult
-            )
+        (
+            stop_loss,
+            tp1,
+            tp2,
+            tp3
+        ) = build_trade_levels(
+            signal,
+            price,
+            atr_value,
+            support,
+            resistance,
+            symbol
+        )
 
         valid_levels, level_reason = (
             validate_trade_levels(
@@ -2456,18 +3349,10 @@ def analyze_market(
                 news_risk
             )
 
-            smart_score = int(
-                max(
-                    0,
-                    min(
-                        100,
-                        float(
-                            smart.get(
-                                "score",
-                                0
-                            )
-                        )
-                    )
+            smart_score = clamp_score(
+                smart.get(
+                    "score",
+                    0
                 )
             )
 
@@ -2510,31 +3395,64 @@ def analyze_market(
             displacement_confirmed,
             dxy_confirmed,
             gainz_v2_confirmed,
-            gainz_pro_confirmed
+            gainz_pro_confirmed,
+            directional_adx
         )
 
-        # Soft microstructure contribution.
-        micro_confirmed = microstructure_confirms(signal, micro)
-        if micro_confirmed:
-            quality_score = min(100, quality_score + MICRO_BONUS)
-        elif micro.get("direction") not in ("NEUTRAL", None):
-            quality_score = max(0, quality_score - MICRO_PENALTY)
-
         # ====================================================
-        # FINAL AI SCORE
+        # MICRO CONFIRMATION
         # ====================================================
 
-        final_ai_score = max(
-            0,
-            min(
-                100,
-                int(
-                    min(
-                        smart_score,
-                        quality_score
-                    )
-                )
+        micro_confirmed = (
+            microstructure_confirms(
+                signal,
+                micro
             )
+        )
+
+        if micro_confirmed:
+
+            quality_score = min(
+                100,
+                quality_score
+                + MICRO_BONUS
+            )
+
+        elif micro.get(
+            "direction"
+        ) not in [
+            "NEUTRAL",
+            None
+        ]:
+
+            quality_score = max(
+                0,
+                quality_score
+                - MICRO_PENALTY
+            )
+
+        # ====================================================
+        # COMPOSITE AI SCORE
+        # ====================================================
+
+        composite_ai_score = (
+            calculate_composite_ai_score(
+                smart_score,
+                quality_score,
+                micro["score"]
+            )
+        )
+
+        final_ai_score = (
+            composite_ai_score
+        )
+
+        print(
+            f"{name}: "
+            f"Smart={smart_score} "
+            f"Quality={quality_score} "
+            f"Micro={micro['score']} "
+            f"Composite={final_ai_score}"
         )
 
         # ====================================================
@@ -2592,28 +3510,42 @@ def analyze_market(
 
             return None
 
+        # Prevent external filter from flipping direction
+        if filtered_signal != signal:
+
+            print(
+                f"{name}: "
+                f"Direction changed by "
+                f"no-trade filter"
+            )
+
+            return None
+
         # ====================================================
-        # MASTER V3 HARD FILTER
+        # MASTER V3.2 HARD FILTER
         # ====================================================
 
-        passed, reason = master_quality_filter(
-            filtered_signal,
-            final_ai_score,
-            quality_score,
-            entry_quality,
-            adx_value,
-            volume_confirmed,
-            trend_aligned,
-            rsi_valid,
-            news_risk,
-            valid_levels
+        passed, reason = (
+            master_quality_filter(
+                filtered_signal,
+                final_ai_score,
+                quality_score,
+                entry_quality,
+                adx_value,
+                volume_confirmed,
+                trend_aligned,
+                rsi_valid,
+                news_risk,
+                valid_levels,
+                directional_adx
+            )
         )
 
         if not passed:
 
             print(
                 f"\n{name}: "
-                f"V3 REJECTED"
+                f"V3.2 REJECTED"
             )
 
             print(
@@ -2622,13 +3554,18 @@ def analyze_market(
             )
 
             print(
+                f"Smart Score: "
+                f"{smart_score}/100"
+            )
+
+            print(
                 f"Quality: "
                 f"{quality_score}/100"
             )
 
             print(
-                f"Smart Score: "
-                f"{smart_score}/100"
+                f"Micro: "
+                f"{micro['score']}/100"
             )
 
             print(
@@ -2637,38 +3574,18 @@ def analyze_market(
             )
 
             print(
+                f"+DI: "
+                f"{plus_di:.2f}"
+            )
+
+            print(
+                f"-DI: "
+                f"{minus_di:.2f}"
+            )
+
+            print(
                 f"Entry: "
                 f"{entry_quality}"
-            )
-
-            print(
-                f"Gainz V2: "
-                f"{gainz_v2_confirmed}"
-            )
-
-            print(
-                f"Gainz Pro: "
-                f"{gainz_pro_confirmed}"
-            )
-
-            print(
-                f"Structure: "
-                f"{structure_confirmed}"
-            )
-
-            print(
-                f"Liquidity: "
-                f"{liquidity_confirmed}"
-            )
-
-            print(
-                f"FVG: "
-                f"{fvg_confirmed}"
-            )
-
-            print(
-                f"Displacement: "
-                f"{displacement_confirmed}"
             )
 
             print(
@@ -2678,20 +3595,32 @@ def analyze_market(
 
             return None
 
-        # Optional strict microstructure gate. OFF by default.
-        if MICROSTRUCTURE_ENABLED and MICROSTRUCTURE_HARD_FILTER:
-            if not microstructure_confirms(filtered_signal, micro):
+        # ====================================================
+        # MICRO HARD GATE
+        # ====================================================
+
+        if (
+            MICROSTRUCTURE_ENABLED
+            and MICROSTRUCTURE_HARD_FILTER
+        ):
+
+            if not microstructure_confirms(
+                filtered_signal,
+                micro
+            ):
+
                 print(
-                    f"{name}: V3.1 MICRO REJECTED - "
-                    f"score={micro['score']} direction={micro['direction']}"
+                    f"{name}: "
+                    f"MICRO REJECTED"
                 )
+
                 return None
 
         # ====================================================
-        # FINAL TP / SL VALIDATION
+        # FINAL TP/SL CHECK
         # ====================================================
 
-        final_valid, _ = (
+        final_valid, final_level_reason = (
             validate_trade_levels(
                 filtered_signal,
                 price,
@@ -2703,6 +3632,12 @@ def analyze_market(
         )
 
         if not final_valid:
+
+            print(
+                f"{name}: "
+                f"Final TP/SL rejected"
+            )
+
             return None
 
         # ====================================================
@@ -2821,16 +3756,24 @@ def analyze_market(
             else "NOT CONFIRMED"
         )
 
+        micro_status = (
+            "CONFIRMED"
+            if micro_confirmed
+            else "NOT CONFIRMED"
+        )
+
         reasons = [
-            "Master V3 hard filters passed",
-            "AI Score 80+",
+            "Master V3.2 hard filters passed",
+            "Composite AI Score 80+",
             "Quality Score 80+",
             "Entry Quality A",
             "ADX 25+",
+            "Directional ADX confirmed",
             "Volume confirmed",
             "M5/M15/H1 aligned",
             "RSI valid",
-            "News risk acceptable"
+            "News risk acceptable",
+            f"Microstructure {micro['direction']}"
         ]
 
         if gainz_v2_confirmed:
@@ -2875,12 +3818,11 @@ def analyze_market(
                 "DXY confirmation bonus +5"
             )
 
-        reasons.append(
-            f"Microstructure V3.1: {micro['direction']} "
-            f"score={micro['score']} BUY={micro['buy_score']} SELL={micro['sell_score']}"
-        )
         if micro_confirmed:
-            reasons.append("Microstructure confirmation +5")
+
+            reasons.append(
+                "Microstructure confirmation +5"
+            )
 
         reasons_text = "\n".join(
             "✅ " + x
@@ -2891,30 +3833,6 @@ def analyze_market(
             "CONFIRMED"
             if volume_confirmed
             else "LOW"
-        )
-
-        v2_buy_status = (
-            "YES"
-            if gainz_v2_buy
-            else "NO"
-        )
-
-        v2_sell_status = (
-            "YES"
-            if gainz_v2_sell
-            else "NO"
-        )
-
-        pro_buy_status = (
-            "YES"
-            if gainz_pro_buy
-            else "NO"
-        )
-
-        pro_sell_status = (
-            "YES"
-            if gainz_pro_sell
-            else "NO"
         )
 
         return f"""
@@ -2929,7 +3847,7 @@ def analyze_market(
 ━━━━━━━━━━━━━━━━━━━━
 
 🥇 QuantumGold AI Signal
-MASTER FILTER V3
+MASTER FILTER V3.2
 
 {name}
 
@@ -2948,7 +3866,7 @@ Take Profit: {p(tp3)}
 Entry Quality:
 {entry_quality}
 
-AI Score:
+Composite AI Score:
 {final_ai_score}/100
 
 Smart Score:
@@ -2956,6 +3874,9 @@ Smart Score:
 
 Quality Score:
 {quality_score}/100
+
+Microstructure Score:
+{micro["score"]}/100
 
 Decision:
 {smart_decision}
@@ -2967,6 +3888,12 @@ Master Filter:
 
 ADX:
 {adx_value:.2f}
+
++DI:
+{plus_di:.2f}
+
+-DI:
+{minus_di:.2f}
 
 RSI:
 {r:.2f}
@@ -2982,7 +3909,7 @@ Volume:
 
 ━━━━━━━━━━━━━━━━━━━━
 
-GAINZALGO CONFIRMATION
+GAINZALGO
 
 GainzAlgo V2 Essential:
 {gainz_v2_status}
@@ -2990,21 +3917,9 @@ GainzAlgo V2 Essential:
 GainzAlgo Pro:
 {gainz_pro_status}
 
-V2 BUY:
-{v2_buy_status}
-
-V2 SELL:
-{v2_sell_status}
-
-Pro BUY:
-{pro_buy_status}
-
-Pro SELL:
-{pro_sell_status}
-
 ━━━━━━━━━━━━━━━━━━━━
 
-Smart Money Confluence
+SMART MONEY
 
 BOS / CHoCH:
 {structure_status}
@@ -3023,11 +3938,42 @@ DXY:
 
 ━━━━━━━━━━━━━━━━━━━━
 
+MICROSTRUCTURE V3.2
+
+Direction:
+{micro["direction"]}
+
+Micro Score:
+{micro["score"]}/100
+
+BUY:
+{micro["buy_score"]}
+
+SELL:
+{micro["sell_score"]}
+
+Impulse:
+{micro["impulse"]:.2f}
+
+Velocity:
+{micro["velocity"]:.2f}
+
+Volume Ratio:
+{micro["volume_ratio"]:.2f}x
+
+Range Ratio:
+{micro["range_ratio"]:.2f}x
+
+Status:
+{micro_status}
+
+━━━━━━━━━━━━━━━━━━━━
+
 News Risk:
 {news_risk}
 
 Risk / Reward:
-{level_reason}
+{final_level_reason}
 
 Target Win Rate:
 {TARGET_WIN_RATE}%
@@ -3052,7 +3998,7 @@ M5 Entry
 M15 Confirmation
 H1 Major Trend
 
-QuantumGold MASTER FILTER V3
+QuantumGold MASTER FILTER V3.2
 """
 
     except Exception as e:
@@ -3075,7 +4021,7 @@ async def main():
     print(
         "\n"
         "====================================================\n"
-        "QuantumGold AI MASTER FILTER V3\n"
+        "QuantumGold AI MASTER FILTER V3.2\n"
         "===================================================="
     )
 
@@ -3092,6 +4038,11 @@ async def main():
     print(
         f"Minimum ADX: "
         f"{MIN_ADX}"
+    )
+
+    print(
+        f"Minimum Composite: "
+        f"{MIN_COMPOSITE_SCORE}"
     )
 
     print(
@@ -3112,14 +4063,17 @@ async def main():
     )
 
     print(
-        "Smart Money confirmations: "
-        "SOFT / BONUS"
+        "Smart Money: SOFT / BONUS"
     )
 
     print(
-        "Microstructure V3.1: "
-        f"{'ENABLED' if MICROSTRUCTURE_ENABLED else 'DISABLED'} | "
-        f"Hard Gate={'ON' if MICROSTRUCTURE_HARD_FILTER else 'OFF'}"
+        "Microstructure V3.2: "
+        f"{'ENABLED' if MICROSTRUCTURE_ENABLED else 'DISABLED'}"
+    )
+
+    print(
+        "Microstructure Hard Gate: "
+        f"{'ON' if MICROSTRUCTURE_HARD_FILTER else 'OFF'}"
     )
 
     crypto_status = (
@@ -3133,13 +4087,26 @@ async def main():
         f"{crypto_status}"
     )
 
-    if is_weekend() and not CRYPTO_ENABLED:
+    # ========================================================
+    # WEEKEND
+    # ========================================================
+
+    if (
+        is_weekend()
+        and not CRYPTO_ENABLED
+    ):
 
         print(
-            "Weekend - Gold/Forex closed; Crypto disabled"
+            "Weekend - "
+            "Gold/Forex closed; "
+            "Crypto disabled"
         )
 
         return
+
+    # ========================================================
+    # TELEGRAM
+    # ========================================================
 
     if not TOKEN:
 
@@ -3175,6 +4142,10 @@ async def main():
             CRYPTO_MARKETS
         )
 
+    # ========================================================
+    # SCAN
+    # ========================================================
+
     for symbol, name in markets_to_scan:
 
         try:
@@ -3198,6 +4169,10 @@ async def main():
                 f"{e}"
             )
 
+    # ========================================================
+    # SEND SIGNALS
+    # ========================================================
+
     if messages:
 
         try:
@@ -3217,7 +4192,7 @@ async def main():
 
             print(
                 "High quality "
-                "MASTER V3 signals sent"
+                "MASTER V3.2 signals sent"
             )
 
         except Exception as e:
@@ -3225,6 +4200,10 @@ async def main():
             print(
                 f"Telegram error: {e}"
             )
+
+        # ====================================================
+        # DAILY REPORT
+        # ====================================================
 
         try:
 
@@ -3251,7 +4230,7 @@ Total Signals:
 ━━━━━━━━━━━━━━━━━━━━
 
 Mode:
-MASTER FILTER V3
+MASTER FILTER V3.2
 
 Minimum AI:
 {MIN_AI_SCORE}
@@ -3259,11 +4238,27 @@ Minimum AI:
 Minimum Quality:
 {MIN_QUALITY_SCORE}
 
+Minimum Composite:
+{MIN_COMPOSITE_SCORE}
+
 Minimum ADX:
 {MIN_ADX}
 
 Design Target:
 {TARGET_WIN_RATE}%
+
+━━━━━━━━━━━━━━━━━━━━
+
+Composite Weights:
+
+Smart:
+{COMPOSITE_SMART_WEIGHT:.0%}
+
+Quality:
+{COMPOSITE_QUALITY_WEIGHT:.0%}
+
+Microstructure:
+{COMPOSITE_MICRO_WEIGHT:.0%}
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -3299,6 +4294,14 @@ Displacement:
 DXY:
 +5 for Gold
 
+━━━━━━━━━━━━━━━━━━━━
+
+Microstructure:
+ENABLED
+
+Micro Hard Gate:
+{"ON" if MICROSTRUCTURE_HARD_FILTER else "OFF"}
+
 Crypto:
 {crypto_report_status}
 """
@@ -3317,7 +4320,7 @@ Crypto:
     else:
 
         print(
-            "No MASTER V3 "
+            "No MASTER V3.2 "
             "quality BUY/SELL signals"
         )
 
