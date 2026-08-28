@@ -2,6 +2,7 @@ import os
 import asyncio
 import datetime
 import math
+import inspect
 
 import yfinance as yf
 import ta
@@ -19,28 +20,60 @@ from no_trade_filter import apply_no_trade_filter
 
 
 # ============================================================
+# OPTIONAL HFT / MICROSTRUCTURE ENGINE
+# ============================================================
+
+HFT_ENGINE_AVAILABLE = False
+hft_engine = None
+
+try:
+    import hft_engine
+    HFT_ENGINE_AVAILABLE = True
+    print("HFT Engine: MODULE LOADED")
+except Exception as e:
+    print(f"HFT Engine: unavailable -> {e}")
+
+
+# ============================================================
 # QuantumGold AI Signal Bot
-# MASTER FILTER V3
+# MASTER FILTER V3.2 + MICROSTRUCTURE / HFT
 #
 # Gold + Forex + Crypto
 #
-# CRYPTO TRIANGLE BREAKOUT:
-#   BTC / ETH / SOL / BNB
-#
-# Triangle = SOFT confirmation
-#
 # M5  = Entry
 # M15 = Confirmation
-# H1  = Main trend
+# H1  = Main Trend
 #
-# Hard filters remain:
+# HARD FILTERS:
 #   AI >= 80
 #   Quality >= 80
-#   ADX Crypto >= 20
+#   ADX
 #   Trend alignment
 #   RSI valid
 #   TP/SL valid
+#   Entry Quality A
 #
+# GOLD / FOREX:
+#   ADX >= 25
+#   Volume = HARD
+#   HIGH NEWS = HARD REJECT
+#
+# CRYPTO:
+#   ADX >= 20
+#   Volume = SOFT
+#   HIGH NEWS = SOFT
+#   Triangle = SOFT
+#
+# SMART MONEY:
+#   BOS / CHOCH
+#   Liquidity Sweep
+#   FVG
+#   Displacement
+#   All are SOFT confirmations
+#
+# HFT / MICROSTRUCTURE:
+#   SOFT confirmation
+#   Never replaces MASTER hard filters
 # ============================================================
 
 
@@ -62,6 +95,23 @@ MIN_ADX = 25
 MIN_CRYPTO_ADX = 20
 
 TARGET_WIN_RATE = 85
+
+
+# ============================================================
+# HFT / MICROSTRUCTURE SETTINGS
+# ============================================================
+
+HFT_ENABLED = True
+
+# HFT is currently a SOFT confirmation.
+# It does NOT become a hard rejection.
+HFT_HARD_GATE = False
+
+# HFT confirmation bonus
+HFT_BONUS = 10
+
+# Minimum HFT score considered useful
+HFT_MIN_SCORE = 60
 
 
 # ============================================================
@@ -196,6 +246,7 @@ def format_price(value, symbol):
     try:
 
         decimals = get_price_decimals(symbol)
+
         number = float(value)
 
         return format(
@@ -884,12 +935,6 @@ def detect_displacement(
 
 # ============================================================
 # CRYPTO SYMMETRICAL TRIANGLE
-#
-# SOFT CONFIRMATION
-#
-# Important:
-# We use CLOSED candles only.
-# Current breakout candle is NOT included in the boundary.
 # ============================================================
 
 def detect_symmetric_triangle(
@@ -920,13 +965,8 @@ def detect_symmetric_triangle(
 
             return result
 
-        # ----------------------------------------------------
-        # Latest CLOSED candle
-        # ----------------------------------------------------
-
         last_closed = len(close) - 2
 
-        # Need enough candles before breakout candle
         structure_end = last_closed - 1
 
         structure_start = max(
@@ -966,10 +1006,6 @@ def detect_symmetric_triangle(
         if len(structure_highs) < 15:
             return result
 
-        # ----------------------------------------------------
-        # Split structure into two sections
-        # ----------------------------------------------------
-
         n = len(structure_highs)
 
         mid = n // 2
@@ -989,10 +1025,6 @@ def detect_symmetric_triangle(
         second_low = min(
             structure_lows[mid:]
         )
-
-        # ----------------------------------------------------
-        # Converging structure
-        # ----------------------------------------------------
 
         upper_falling = (
             second_high < first_high
@@ -1041,13 +1073,6 @@ def detect_symmetric_triangle(
 
             return result
 
-        # ----------------------------------------------------
-        # Approximate current triangle boundaries
-        #
-        # Use the latest structure extremes,
-        # NOT the breakout candle.
-        # ----------------------------------------------------
-
         upper_boundary = second_high
         lower_boundary = second_low
 
@@ -1061,20 +1086,8 @@ def detect_symmetric_triangle(
             lower_boundary
         )
 
-        # ----------------------------------------------------
-        # Breakout candle
-        # ----------------------------------------------------
-
         breakout_close = float(
             close.iloc[last_closed]
-        )
-
-        breakout_high = float(
-            high.iloc[last_closed]
-        )
-
-        breakout_low = float(
-            low.iloc[last_closed]
         )
 
         breakout_buffer = (
@@ -1100,12 +1113,6 @@ def detect_symmetric_triangle(
         result[
             "bearish_breakout"
         ] = bearish_breakout
-
-        # ----------------------------------------------------
-        # RETEST
-        #
-        # Search previous closed candles.
-        # ----------------------------------------------------
 
         retest_start = max(
             structure_start,
@@ -1540,6 +1547,357 @@ def detect_gainzalgo_pro(
 
 
 # ============================================================
+# HFT / MICROSTRUCTURE ADAPTER
+# ============================================================
+
+def run_hft_engine(
+    symbol,
+    name,
+    m5,
+    m15,
+    h1,
+    signal,
+    price,
+    atr_value,
+    volume_confirmed,
+    adx_value
+):
+
+    result = {
+        "available": False,
+        "confirmed": False,
+        "score": 0,
+        "direction": "NEUTRAL",
+        "reason": "HFT unavailable"
+    }
+
+    if not HFT_ENABLED:
+
+        result["reason"] = "HFT disabled"
+
+        return result
+
+    if not HFT_ENGINE_AVAILABLE:
+
+        result["reason"] = "hft_engine.py not loaded"
+
+        return result
+
+    try:
+
+        functions = [
+            "analyze_hft",
+            "get_hft_signal",
+            "analyze",
+            "get_signal",
+            "run_hft",
+            "run"
+        ]
+
+        target = None
+
+        for function_name in functions:
+
+            candidate = getattr(
+                hft_engine,
+                function_name,
+                None
+            )
+
+            if callable(candidate):
+
+                target = candidate
+                break
+
+        if target is None:
+
+            result["reason"] = (
+                "No supported HFT function found"
+            )
+
+            print(
+                f"{name}: "
+                f"HFT module loaded but "
+                f"no supported function found"
+            )
+
+            return result
+
+        context = {
+            "symbol": symbol,
+            "name": name,
+            "m5": m5,
+            "m15": m15,
+            "h1": h1,
+            "signal": signal,
+            "price": price,
+            "atr": atr_value,
+            "atr_value": atr_value,
+            "volume_confirmed": volume_confirmed,
+            "adx": adx_value,
+            "adx_value": adx_value
+        }
+
+        # ----------------------------------------------------
+        # Try intelligent argument matching
+        # ----------------------------------------------------
+
+        try:
+
+            signature = inspect.signature(target)
+
+            parameters = signature.parameters
+
+            kwargs = {}
+
+            for parameter_name in parameters:
+
+                if parameter_name in context:
+
+                    kwargs[
+                        parameter_name
+                    ] = context[
+                        parameter_name
+                    ]
+
+            if kwargs:
+
+                raw_result = target(
+                    **kwargs
+                )
+
+            else:
+
+                raw_result = target(
+                    context
+                )
+
+        except Exception:
+
+            try:
+
+                raw_result = target(
+                    context
+                )
+
+            except Exception:
+
+                raw_result = target()
+
+        # ----------------------------------------------------
+        # Normalize result
+        # ----------------------------------------------------
+
+        result["available"] = True
+
+        if isinstance(
+            raw_result,
+            dict
+        ):
+
+            raw_score = (
+                raw_result.get(
+                    "score",
+                    raw_result.get(
+                        "hft_score",
+                        0
+                    )
+                )
+            )
+
+            try:
+
+                raw_score = float(
+                    raw_score
+                )
+
+            except Exception:
+
+                raw_score = 0
+
+            result["score"] = int(
+                max(
+                    0,
+                    min(
+                        100,
+                        raw_score
+                    )
+                )
+            )
+
+            direction = str(
+                raw_result.get(
+                    "direction",
+                    raw_result.get(
+                        "signal",
+                        "NEUTRAL"
+                    )
+                )
+            ).upper()
+
+            if "BUY" in direction:
+
+                result["direction"] = "BUY"
+
+            elif "SELL" in direction:
+
+                result["direction"] = "SELL"
+
+            else:
+
+                result["direction"] = "NEUTRAL"
+
+            confirmed = raw_result.get(
+                "confirmed",
+                raw_result.get(
+                    "confirmation",
+                    None
+                )
+            )
+
+            if confirmed is None:
+
+                result["confirmed"] = (
+                    result["score"]
+                    >= HFT_MIN_SCORE
+                    and (
+                        (
+                            signal == "🟢 BUY"
+                            and result["direction"] == "BUY"
+                        )
+                        or
+                        (
+                            signal == "🔴 SELL"
+                            and result["direction"] == "SELL"
+                        )
+                    )
+                )
+
+            else:
+
+                result["confirmed"] = bool(
+                    confirmed
+                )
+
+            result["reason"] = str(
+                raw_result.get(
+                    "reason",
+                    "HFT analysis completed"
+                )
+            )
+
+        elif isinstance(
+            raw_result,
+            (int, float)
+        ):
+
+            result["score"] = int(
+                max(
+                    0,
+                    min(
+                        100,
+                        float(raw_result)
+                    )
+                )
+            )
+
+            result["confirmed"] = (
+                result["score"]
+                >= HFT_MIN_SCORE
+            )
+
+            result["reason"] = (
+                "Numeric HFT score"
+            )
+
+        elif isinstance(
+            raw_result,
+            str
+        ):
+
+            direction = raw_result.upper()
+
+            if "BUY" in direction:
+
+                result["direction"] = "BUY"
+
+            elif "SELL" in direction:
+
+                result["direction"] = "SELL"
+
+            result["confirmed"] = (
+                (
+                    signal == "🟢 BUY"
+                    and result["direction"] == "BUY"
+                )
+                or
+                (
+                    signal == "🔴 SELL"
+                    and result["direction"] == "SELL"
+                )
+            )
+
+            result["score"] = (
+                HFT_MIN_SCORE
+                if result["confirmed"]
+                else 0
+            )
+
+            result["reason"] = (
+                "Text HFT result"
+            )
+
+        else:
+
+            result["reason"] = (
+                "Unknown HFT result type"
+            )
+
+        # ----------------------------------------------------
+        # Direction safety
+        # ----------------------------------------------------
+
+        if signal == "🟢 BUY":
+
+            if result["direction"] == "SELL":
+
+                result["confirmed"] = False
+
+        elif signal == "🔴 SELL":
+
+            if result["direction"] == "BUY":
+
+                result["confirmed"] = False
+
+        print(
+            f"{name}: "
+            f"HFT available="
+            f"{result['available']} "
+            f"score="
+            f"{result['score']} "
+            f"direction="
+            f"{result['direction']} "
+            f"confirmed="
+            f"{result['confirmed']}"
+        )
+
+        return result
+
+    except Exception as e:
+
+        print(
+            f"{name}: "
+            f"HFT execution error: {e}"
+        )
+
+        result["reason"] = (
+            f"HFT error: {e}"
+        )
+
+        return result
+
+
+# ============================================================
 # TP / SL VALIDATION
 # ============================================================
 
@@ -1652,7 +2010,8 @@ def calculate_quality_score(
     triangle_volume=False,
     triangle_retest=False,
     triangle_m15_confirmation=False,
-    triangle_h1_alignment=False
+    triangle_h1_alignment=False,
+    hft_confirmed=False
 ):
 
     score = 0
@@ -1779,9 +2138,6 @@ def calculate_quality_score(
 
     # ========================================================
     # CRYPTO TRIANGLE
-    #
-    # SOFT CONFIRMATION
-    # Maximum +25
     # ========================================================
 
     if triangle_breakout:
@@ -1799,6 +2155,13 @@ def calculate_quality_score(
     if triangle_h1_alignment:
         score += 5
 
+    # ========================================================
+    # HFT / MICROSTRUCTURE
+    # ========================================================
+
+    if hft_confirmed:
+        score += HFT_BONUS
+
     return max(
         0,
         min(
@@ -1809,7 +2172,7 @@ def calculate_quality_score(
 
 
 # ============================================================
-# MASTER V3 HARD FILTER
+# MASTER V3.2 HARD FILTER
 # ============================================================
 
 def master_quality_filter(
@@ -1865,6 +2228,7 @@ def master_quality_filter(
 
     # Gold / Forex volume = HARD
     # Crypto volume = SOFT
+
     if not crypto:
 
         if not volume_confirmed:
@@ -1900,7 +2264,7 @@ def master_quality_filter(
         )
 
     return True, (
-        "ALL MASTER V3 HARD FILTERS PASSED"
+        "ALL MASTER V3.2 HARD FILTERS PASSED"
     )
 
 
@@ -2462,7 +2826,8 @@ def analyze_market(symbol, name):
                 f"M15 Triangle BUY="
                 f"{triangle_m15['bullish_breakout']} "
                 f"SELL="
-                f"{triangle_m15['bearish_breakout']}")
+                f"{triangle_m15['bearish_breakout']}"
+            )
 
         # ====================================================
         # BUY / SELL SCORE
@@ -2497,9 +2862,18 @@ def analyze_market(symbol, name):
         if 30 < r < 55:
             sell_score += 10
 
-        if adx_value >= 25:
-            buy_score += 10
-            sell_score += 10
+        # Crypto and Forex use their own ADX hard thresholds later.
+        if crypto:
+
+            if adx_value >= MIN_CRYPTO_ADX:
+                buy_score += 10
+                sell_score += 10
+
+        else:
+
+            if adx_value >= MIN_ADX:
+                buy_score += 10
+                sell_score += 10
 
         if gainz_v2_buy:
             buy_score += GAINZ_V2_BONUS
@@ -2545,13 +2919,11 @@ def analyze_market(symbol, name):
 
         # ====================================================
         # CRYPTO TRIANGLE SCORE
-        #
         # SOFT ONLY
         # ====================================================
 
         if crypto:
 
-            # BUY
             if triangle["bullish_breakout"]:
                 buy_score += 5
 
@@ -2576,7 +2948,6 @@ def analyze_market(symbol, name):
             ):
                 buy_score += 5
 
-            # SELL
             if triangle["bearish_breakout"]:
                 sell_score += 5
 
@@ -2719,38 +3090,6 @@ def analyze_market(symbol, name):
             triangle_m15_confirmation = False
             triangle_h1_alignment = False
 
-        if crypto:
-
-            print(
-                f"{name}: "
-                f"Triangle Breakout="
-                f"{triangle_breakout}"
-            )
-
-            print(
-                f"{name}: "
-                f"Triangle Volume="
-                f"{triangle_volume}"
-            )
-
-            print(
-                f"{name}: "
-                f"Triangle Retest="
-                f"{triangle_retest}"
-            )
-
-            print(
-                f"{name}: "
-                f"Triangle M15="
-                f"{triangle_m15_confirmation}"
-            )
-
-            print(
-                f"{name}: "
-                f"Triangle H1="
-                f"{triangle_h1_alignment}"
-            )
-
         # ====================================================
         # GAINZ CONFIRMATION
         # ====================================================
@@ -2885,6 +3224,62 @@ def analyze_market(symbol, name):
             displacement_confirmed = (
                 displacement["bearish"]
             )
+
+        # ====================================================
+        # HFT / MICROSTRUCTURE
+        #
+        # Run after the directional candidate exists.
+        # HFT does NOT override the trend.
+        # ====================================================
+
+        hft = run_hft_engine(
+            symbol=symbol,
+            name=name,
+            m5=m5,
+            m15=m15,
+            h1=h1,
+            signal=signal,
+            price=price,
+            atr_value=atr_value,
+            volume_confirmed=volume_confirmed,
+            adx_value=adx_value
+        )
+
+        hft_confirmed = (
+            hft["confirmed"]
+        )
+
+        hft_score = (
+            hft["score"]
+        )
+
+        print(
+            f"{name}: "
+            f"HFT Score={hft_score}/100 "
+            f"Confirmed={hft_confirmed} "
+            f"Direction={hft['direction']}"
+        )
+
+        # ====================================================
+        # OPTIONAL HFT HARD GATE
+        #
+        # Default OFF.
+        # ====================================================
+
+        if HFT_HARD_GATE:
+
+            if (
+                HFT_ENABLED
+                and hft["available"]
+                and not hft_confirmed
+            ):
+
+                print(
+                    f"{name}: "
+                    f"HFT HARD GATE rejected signal"
+                )
+
+                return None
 
         # ====================================================
         # TP / SL
@@ -3085,7 +3480,8 @@ def analyze_market(symbol, name):
             triangle_volume,
             triangle_retest,
             triangle_m15_confirmation,
-            triangle_h1_alignment
+            triangle_h1_alignment,
+            hft_confirmed
         )
 
         # ====================================================
@@ -3110,6 +3506,7 @@ def analyze_market(symbol, name):
             f"Preliminary={preliminary} "
             f"Smart={smart_score} "
             f"Quality={quality_score} "
+            f"HFT={hft_score} "
             f"Final AI={final_ai_score}"
         )
 
@@ -3173,7 +3570,7 @@ def analyze_market(symbol, name):
             return None
 
         # ====================================================
-        # MASTER V3 HARD FILTER
+        # MASTER V3.2 HARD FILTER
         # ====================================================
 
         passed, reason = (
@@ -3195,7 +3592,7 @@ def analyze_market(symbol, name):
         if not passed:
 
             print(
-                f"\n{name}: V3 REJECTED"
+                f"\n{name}: V3.2 REJECTED"
             )
 
             print(
@@ -3216,6 +3613,21 @@ def analyze_market(symbol, name):
             print(
                 f"Smart Decision: "
                 f"{smart_decision}"
+            )
+
+            print(
+                f"HFT Score: "
+                f"{hft_score}/100"
+            )
+
+            print(
+                f"HFT Confirmed: "
+                f"{hft_confirmed}"
+            )
+
+            print(
+                f"HFT Direction: "
+                f"{hft['direction']}"
             )
 
             print(
@@ -3549,7 +3961,8 @@ async def main():
     print(
         "\n"
         "====================================================\n"
-        "QuantumGold AI MASTER FILTER V3\n"
+        "QuantumGold AI MASTER FILTER V3.2\n"
+        "+ MICROSTRUCTURE / HFT\n"
         "===================================================="
     )
 
@@ -3607,6 +4020,26 @@ async def main():
     print(
         "Smart Money confirmations: "
         "SOFT / BONUS"
+    )
+
+    print(
+        f"HFT Engine: "
+        f"{'ENABLED' if HFT_ENABLED else 'DISABLED'}"
+    )
+
+    print(
+        f"HFT Module: "
+        f"{'LOADED' if HFT_ENGINE_AVAILABLE else 'NOT LOADED'}"
+    )
+
+    print(
+        f"HFT Hard Gate: "
+        f"{'ON' if HFT_HARD_GATE else 'OFF'}"
+    )
+
+    print(
+        f"HFT Bonus: "
+        f"+{HFT_BONUS}"
     )
 
     print(
