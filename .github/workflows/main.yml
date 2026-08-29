@@ -29,4 +29,4 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TWELVE_API_KEY: ${{ secrets.TWELVE_API_KEY }}
         run: |
-          python QuantumGold_MASTER_FILTER_V3_1_Microstructure.py
+          python QuantumGold_Adaptive_Scalping_V4.py
