@@ -1,8 +1,10 @@
+```python
 import os
 import asyncio
 import datetime
 import math
 
+import pandas as pd
 import yfinance as yf
 import ta
 from telegram import Bot
@@ -22,8 +24,9 @@ from no_trade_filter import apply_no_trade_filter
 # QuantumGold AI Signal Bot
 # ADAPTIVE SCALPING V4 + MICROSTRUCTURE
 #
-# GainzAlgo V2 Essential + GainzAlgo Pro integrated
+# GainzAlgo V2 Essential + GainzAlgo Pro
 # Smart Money confirmations = SOFT / BONUS
+# Crypto enabled
 # ============================================================
 
 
@@ -69,12 +72,29 @@ CRYPTO_ENABLED = True
 H4_ENABLED = True
 M1_ENABLED = True
 REGIME_ENABLED = True
-ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "1000"))
-BASE_RISK_PCT = float(os.getenv("BASE_RISK_PCT", "1.0"))
-MICRO_ACCOUNT_THRESHOLD = float(os.getenv("MICRO_ACCOUNT_THRESHOLD", "10"))
-MICRO_RISK_PCT = float(os.getenv("MICRO_RISK_PCT", "1.0"))
-MAX_RISK_PCT = float(os.getenv("MAX_RISK_PCT", "1.0"))
+
+ACCOUNT_BALANCE = float(
+    os.getenv("ACCOUNT_BALANCE", "1000")
+)
+
+BASE_RISK_PCT = float(
+    os.getenv("BASE_RISK_PCT", "1.0")
+)
+
+MICRO_ACCOUNT_THRESHOLD = float(
+    os.getenv("MICRO_ACCOUNT_THRESHOLD", "10")
+)
+
+MICRO_RISK_PCT = float(
+    os.getenv("MICRO_RISK_PCT", "1.0")
+)
+
+MAX_RISK_PCT = float(
+    os.getenv("MAX_RISK_PCT", "1.0")
+)
+
 MIN_REGIME_ADX = 18
+
 
 MARKETS = [
     ("GC=F", "XAU/USD"),
@@ -144,14 +164,8 @@ def get_price_decimals(symbol):
 
 def format_price(value, symbol):
 
-    """
-    IMPORTANT:
-    Do NOT use nested f-strings here.
-    The previous version caused:
-    SyntaxError: f-string: expecting '}'
-    """
-
     try:
+
         decimals = get_price_decimals(symbol)
         number = float(value)
 
@@ -161,6 +175,7 @@ def format_price(value, symbol):
         )
 
     except Exception:
+
         return "N/A"
 
 
@@ -176,9 +191,18 @@ def safe_float(series, index=-1):
 
     try:
 
-        value = float(
-            series.iloc[index]
-        )
+        if series is None:
+            return None
+
+        if hasattr(series, "iloc"):
+
+            value = float(
+                series.iloc[index]
+            )
+
+        else:
+
+            value = float(series)
 
         if math.isfinite(value):
             return value
@@ -190,53 +214,363 @@ def safe_float(series, index=-1):
 
 
 # ============================================================
+# V4 DATA NORMALIZATION
+# ============================================================
+
+def prepared_to_dataframe(data):
+
+    """
+    Convert V4 prepared-data dictionary into a standard
+    lowercase OHLCV DataFrame.
+
+    This is the main compatibility layer that prevents:
+
+        'dict' object has no attribute 'empty'
+
+    """
+
+    if data is None:
+        return None
+
+    try:
+
+        # Already a DataFrame
+        if isinstance(data, pd.DataFrame):
+
+            df = data.copy()
+
+            rename_map = {
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume"
+            }
+
+            df = df.rename(
+                columns=rename_map
+            )
+
+            return df
+
+        # V4 prepared dictionary
+        if isinstance(data, dict):
+
+            required = [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume"
+            ]
+
+            if not all(
+                key in data
+                for key in required
+            ):
+                return None
+
+            df = pd.concat(
+                [
+                    pd.Series(
+                        data["open"],
+                        name="open"
+                    ),
+                    pd.Series(
+                        data["high"],
+                        name="high"
+                    ),
+                    pd.Series(
+                        data["low"],
+                        name="low"
+                    ),
+                    pd.Series(
+                        data["close"],
+                        name="close"
+                    ),
+                    pd.Series(
+                        data["volume"],
+                        name="volume"
+                    )
+                ],
+                axis=1
+            )
+
+            df = df.dropna(
+                subset=[
+                    "open",
+                    "high",
+                    "low",
+                    "close"
+                ]
+            )
+
+            return df
+
+        return None
+
+    except Exception as e:
+
+        print(
+            f"DataFrame normalization error: {e}"
+        )
+
+        return None
+
+
+# ============================================================
 # V4 ADAPTIVE HELPERS
 # ============================================================
 
 def resample_h4(df):
-    """Build true H4 candles from closed H1 candles."""
-    if df is None or df.empty:
-        return None
-    x = df.copy()
+
+    """
+    Build true H4 candles from closed H1 candles.
+
+    Accepts either:
+        - pandas DataFrame
+        - V4 prepared dictionary
+    """
+
     try:
-        x = x.iloc[:-1].copy()  # closed candles only
-        return x.resample("4h").agg({
-            "open": "first", "high": "max", "low": "min",
-            "close": "last", "volume": "sum"
-        }).dropna()
-    except Exception:
+
+        df = prepared_to_dataframe(df)
+
+        if df is None or df.empty:
+            return None
+
+        x = df.copy()
+
+        # Closed candles only
+        if len(x) > 1:
+            x = x.iloc[:-1].copy()
+
+        if x.empty:
+            return None
+
+        # Ensure datetime index
+        if not isinstance(
+            x.index,
+            pd.DatetimeIndex
+        ):
+            try:
+                x.index = pd.to_datetime(
+                    x.index,
+                    utc=True
+                )
+            except Exception:
+                return None
+
+        result = (
+            x.resample("4h")
+            .agg({
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+                "volume": "sum"
+            })
+            .dropna(
+                subset=[
+                    "open",
+                    "high",
+                    "low",
+                    "close"
+                ]
+            )
+        )
+
+        if result.empty:
+            return None
+
+        return result
+
+    except Exception as e:
+
+        print(
+            f"H4 resample error: {e}"
+        )
+
         return None
 
 
 def market_regime(df):
-    """Classify regime without forcing a trade direction."""
-    if df is None or len(df) < 60:
-        return {"name": "UNKNOWN", "trend": 0, "strength": 0.0, "volatility": "UNKNOWN"}
-    c, h, l = df["close"], df["high"], df["low"]
-    adx = ta.trend.ADXIndicator(h, l, c, 14).adx()
-    atr = ta.volatility.average_true_range(h, l, c, 14)
-    e50 = ta.trend.ema_indicator(c, 50)
-    e200 = ta.trend.ema_indicator(c, 200)
-    a = safe_float(adx, -2) or 0.0
-    av = safe_float(atr, -2) or 0.0
-    e5 = safe_float(e50, -2) or 0.0
-    e2 = safe_float(e200, -2) or 0.0
-    trend = 1 if e5 > e2 else -1 if e5 < e2 else 0
-    name = "TREND" if a >= MIN_REGIME_ADX else "RANGE"
-    if av > 0 and len(atr.dropna()) >= 40:
-        med = float(atr.dropna().tail(40).median())
-        vol = "HIGH" if av > med * 1.5 else "LOW" if av < med * 0.7 else "NORMAL"
-    else:
-        vol = "NORMAL"
-    return {"name": name, "trend": trend, "strength": a, "volatility": vol}
+
+    """
+    Classify market regime.
+
+    Accepts either DataFrame or V4 prepared dictionary.
+    """
+
+    try:
+
+        df = prepared_to_dataframe(df)
+
+        if (
+            df is None
+            or df.empty
+            or len(df) < 60
+        ):
+
+            return {
+                "name": "UNKNOWN",
+                "trend": 0,
+                "strength": 0.0,
+                "volatility": "UNKNOWN"
+            }
+
+        c = df["close"]
+        h = df["high"]
+        l = df["low"]
+
+        adx = ta.trend.ADXIndicator(
+            h,
+            l,
+            c,
+            14
+        ).adx()
+
+        atr = ta.volatility.average_true_range(
+            h,
+            l,
+            c,
+            14
+        )
+
+        e50 = ta.trend.ema_indicator(
+            c,
+            50
+        )
+
+        e200 = ta.trend.ema_indicator(
+            c,
+            200
+        )
+
+        a = safe_float(
+            adx,
+            -2
+        ) or 0.0
+
+        av = safe_float(
+            atr,
+            -2
+        ) or 0.0
+
+        e5 = safe_float(
+            e50,
+            -2
+        ) or 0.0
+
+        e2 = safe_float(
+            e200,
+            -2
+        ) or 0.0
+
+        trend = (
+            1
+            if e5 > e2
+            else -1
+            if e5 < e2
+            else 0
+        )
+
+        name = (
+            "TREND"
+            if a >= MIN_REGIME_ADX
+            else "RANGE"
+        )
+
+        if (
+            av > 0
+            and len(
+                atr.dropna()
+            ) >= 40
+        ):
+
+            med = float(
+                atr.dropna()
+                .tail(40)
+                .median()
+            )
+
+            vol = (
+                "HIGH"
+                if av > med * 1.5
+                else "LOW"
+                if av < med * 0.7
+                else "NORMAL"
+            )
+
+        else:
+
+            vol = "NORMAL"
+
+        return {
+            "name": name,
+            "trend": trend,
+            "strength": a,
+            "volatility": vol
+        }
+
+    except Exception as e:
+
+        print(
+            f"Market regime error: {e}"
+        )
+
+        return {
+            "name": "UNKNOWN",
+            "trend": 0,
+            "strength": 0.0,
+            "volatility": "UNKNOWN"
+        }
 
 
 def adaptive_risk(balance=None):
-    """Risk budget only; never uses martingale or increases after losses."""
-    b = float(balance if balance is not None else ACCOUNT_BALANCE)
-    pct = MICRO_RISK_PCT if b <= MICRO_ACCOUNT_THRESHOLD else BASE_RISK_PCT
-    pct = max(0.1, min(MAX_RISK_PCT, pct))
-    return {"balance": b, "risk_pct": pct, "risk_cash": b * pct / 100.0, "mode": "MICRO" if b <= MICRO_ACCOUNT_THRESHOLD else "STANDARD"}
+
+    """
+    Risk budget only.
+    No martingale.
+    No increase after losses.
+    """
+
+    try:
+
+        b = float(
+            balance
+            if balance is not None
+            else ACCOUNT_BALANCE
+        )
+
+    except Exception:
+
+        b = ACCOUNT_BALANCE
+
+    pct = (
+        MICRO_RISK_PCT
+        if b <= MICRO_ACCOUNT_THRESHOLD
+        else BASE_RISK_PCT
+    )
+
+    pct = max(
+        0.1,
+        min(
+            MAX_RISK_PCT,
+            pct
+        )
+    )
+
+    return {
+        "balance": b,
+        "risk_pct": pct,
+        "risk_cash": b * pct / 100.0,
+        "mode": (
+            "MICRO"
+            if b <= MICRO_ACCOUNT_THRESHOLD
+            else "STANDARD"
+        )
+    }
 
 
 # ============================================================
@@ -252,7 +586,10 @@ def get_data(symbol, interval="5m"):
             f"{interval} data..."
         )
 
+        # Yahoo Finance restrictions:
+        # 1m data is only available for a short period.
         period = {
+            "1m": "7d",
             "5m": "7d",
             "15m": "60d",
             "1h": "730d"
@@ -270,7 +607,29 @@ def get_data(symbol, interval="5m"):
             threads=False
         )
 
-        if data is None or data.empty:
+        if data is None:
+
+            print(
+                f"{symbol}: "
+                f"NO DATA interval={interval}"
+            )
+
+            return None
+
+        if not isinstance(
+            data,
+            pd.DataFrame
+        ):
+
+            print(
+                f"{symbol}: "
+                f"Unexpected data type: "
+                f"{type(data).__name__}"
+            )
+
+            return None
+
+        if data.empty:
 
             print(
                 f"{symbol}: EMPTY DATA "
@@ -279,6 +638,7 @@ def get_data(symbol, interval="5m"):
 
             return None
 
+        # Flatten Yahoo MultiIndex columns
         if getattr(
             data.columns,
             "nlevels",
@@ -364,64 +724,77 @@ def prepare_data(symbol, interval="5m"):
         low = data["Low"]
         volume = data["Volume"]
 
-        if hasattr(
-            open_price,
-            "columns"
-        ):
-            open_price = (
-                open_price.iloc[:, 0]
-            )
+        # Extra protection against Yahoo MultiIndex
+        for name, value in [
+            ("open", open_price),
+            ("close", close),
+            ("high", high),
+            ("low", low),
+            ("volume", volume)
+        ]:
 
-        if hasattr(
-            close,
-            "columns"
-        ):
-            close = close.iloc[:, 0]
+            if isinstance(
+                value,
+                pd.DataFrame
+            ):
 
-        if hasattr(
-            high,
-            "columns"
-        ):
-            high = high.iloc[:, 0]
+                value = value.iloc[:, 0]
 
-        if hasattr(
-            low,
-            "columns"
-        ):
-            low = low.iloc[:, 0]
+            if name == "open":
+                open_price = value
 
-        if hasattr(
-            volume,
-            "columns"
-        ):
-            volume = volume.iloc[:, 0]
+            elif name == "close":
+                close = value
+
+            elif name == "high":
+                high = value
+
+            elif name == "low":
+                low = value
+
+            elif name == "volume":
+                volume = value
 
         open_price = (
-            open_price.dropna()
+            pd.Series(open_price)
+            .dropna()
         )
 
         close = (
-            close.dropna()
+            pd.Series(close)
+            .dropna()
         )
 
         high = (
-            high.dropna()
+            pd.Series(high)
+            .dropna()
         )
 
         low = (
-            low.dropna()
+            pd.Series(low)
+            .dropna()
         )
 
         volume = (
-            volume.fillna(0)
+            pd.Series(volume)
+            .fillna(0)
         )
 
-        if len(close) < 220:
+        # M1 is used only for timing.
+        # It does not need 220 candles.
+        minimum_required = (
+            60
+            if interval == "1m"
+            else 220
+        )
+
+        if len(close) < minimum_required:
 
             print(
                 f"{symbol}: "
                 f"insufficient prepared "
-                f"data ({len(close)})"
+                f"data for {interval} "
+                f"({len(close)})"
             )
 
             return None
@@ -784,7 +1157,10 @@ def detect_displacement(
             - low.iloc[i]
         )
 
-        current_open = float(open_price.iloc[i])
+        current_open = float(
+            open_price.iloc[i]
+        )
+
         body = abs(
             current_close
             - current_open
@@ -1180,10 +1556,11 @@ def detect_gainzalgo_pro(
 
 
 # ============================================================
-# V3.1 MICROSTRUCTURE / HFT-STYLE LAYER
+# MICROSTRUCTURE / HFT-STYLE LAYER
 # ============================================================
-# OHLCV-based microstructure. This is NOT true exchange order-book HFT.
-# True HFT requires tick/order-book/bid-ask data from a suitable feed.
+# OHLCV-based microstructure.
+# This is NOT true exchange order-book HFT.
+# True HFT requires tick/order-book/bid-ask data.
 
 MICROSTRUCTURE_ENABLED = True
 MICROSTRUCTURE_HARD_FILTER = False
@@ -1192,117 +1569,440 @@ MICRO_BONUS = 5
 MICRO_PENALTY = 5
 
 
-def _safe_ratio(numerator, denominator, default=0.0):
+def _safe_ratio(
+    numerator,
+    denominator,
+    default=0.0
+):
+
     try:
-        d = float(denominator)
+
+        d = float(
+            denominator
+        )
+
         if abs(d) < 1e-12:
             return default
-        return float(numerator) / d
+
+        return (
+            float(numerator)
+            / d
+        )
+
     except Exception:
+
         return default
 
 
-def analyze_microstructure(open_price, close, high, low, volume, atr_value):
-    """Analyze the last completed candle and prior M5 candles only."""
+def analyze_microstructure(
+    open_price,
+    close,
+    high,
+    low,
+    volume,
+    atr_value
+):
+
     neutral = {
-        "buy_score": 0, "sell_score": 0, "score": 50,
-        "direction": "NEUTRAL", "impulse": 0.0, "velocity": 0.0,
-        "range_ratio": 1.0, "volume_ratio": 0.0,
-        "breakout_buy": False, "breakout_sell": False,
-        "fake_breakout_buy": False, "fake_breakout_sell": False,
-        "rejection_buy": False, "rejection_sell": False,
-        "pullback_buy": False, "pullback_sell": False,
+        "buy_score": 0,
+        "sell_score": 0,
+        "score": 50,
+        "direction": "NEUTRAL",
+        "impulse": 0.0,
+        "velocity": 0.0,
+        "range_ratio": 1.0,
+        "volume_ratio": 0.0,
+        "breakout_buy": False,
+        "breakout_sell": False,
+        "fake_breakout_buy": False,
+        "fake_breakout_sell": False,
+        "rejection_buy": False,
+        "rejection_sell": False,
+        "pullback_buy": False,
+        "pullback_sell": False,
         "reason": "Microstructure unavailable",
     }
+
     try:
+
         i = len(close) - 2
         atr = float(atr_value)
+
         if i < 25 or atr <= 0:
             return neutral
-        o, c = float(open_price.iloc[i]), float(close.iloc[i])
-        h, l = float(high.iloc[i]), float(low.iloc[i])
-        prev_c = float(close.iloc[i - 1])
-        prev_o = float(open_price.iloc[i - 1])
+
+        o = float(
+            open_price.iloc[i]
+        )
+
+        c = float(
+            close.iloc[i]
+        )
+
+        h = float(
+            high.iloc[i]
+        )
+
+        l = float(
+            low.iloc[i]
+        )
+
+        prev_c = float(
+            close.iloc[i - 1]
+        )
+
+        prev_o = float(
+            open_price.iloc[i - 1]
+        )
+
         if h <= l:
             return neutral
-        start = max(0, i - 20)
-        prev_high20 = float(high.iloc[start:i].max())
-        prev_low20 = float(low.iloc[start:i].min())
-        ranges = (high - low).iloc[start:i].astype(float)
-        avg_range = float(ranges.median()) if len(ranges) else 0.0
-        vols = volume.iloc[start:i].astype(float)
-        avg_volume = float(vols.mean()) if len(vols) else 0.0
-        current_volume = float(volume.iloc[i])
+
+        start = max(
+            0,
+            i - 20
+        )
+
+        prev_high20 = float(
+            high.iloc[start:i].max()
+        )
+
+        prev_low20 = float(
+            low.iloc[start:i].min()
+        )
+
+        ranges = (
+            high - low
+        ).iloc[
+            start:i
+        ].astype(float)
+
+        avg_range = (
+            float(
+                ranges.median()
+            )
+            if len(ranges)
+            else 0.0
+        )
+
+        vols = (
+            volume.iloc[start:i]
+            .astype(float)
+        )
+
+        avg_volume = (
+            float(
+                vols.mean()
+            )
+            if len(vols)
+            else 0.0
+        )
+
+        current_volume = float(
+            volume.iloc[i]
+        )
+
         candle_range = h - l
-        body = abs(c - o)
-        body_ratio = _safe_ratio(body, candle_range)
-        close_location = _safe_ratio(c - l, candle_range)
-        upper_wick = h - max(o, c)
-        lower_wick = min(o, c) - l
-        impulse = _safe_ratio(c - o, atr)
-        velocity = _safe_ratio(c - prev_c, atr)
-        range_ratio = _safe_ratio(candle_range, avg_range, 1.0)
-        volume_ratio = _safe_ratio(current_volume, avg_volume, 0.0)
-        breakout_buy = c > prev_high20
-        breakout_sell = c < prev_low20
-        fake_breakout_buy = l < prev_low20 and c > prev_low20
-        fake_breakout_sell = h > prev_high20 and c < prev_high20
-        rejection_buy = lower_wick >= body * 1.2 and close_location >= 0.65
-        rejection_sell = upper_wick >= body * 1.2 and close_location <= 0.35
-        pullback_buy = (prev_c - prev_o) < 0 and (c - o) > 0 and c > prev_c
-        pullback_sell = (prev_c - prev_o) > 0 and (c - o) < 0 and c < prev_c
-        buy = sell = 0
+
+        body = abs(
+            c - o
+        )
+
+        body_ratio = _safe_ratio(
+            body,
+            candle_range
+        )
+
+        close_location = _safe_ratio(
+            c - l,
+            candle_range
+        )
+
+        upper_wick = (
+            h - max(o, c)
+        )
+
+        lower_wick = (
+            min(o, c) - l
+        )
+
+        impulse = _safe_ratio(
+            c - o,
+            atr
+        )
+
+        velocity = _safe_ratio(
+            c - prev_c,
+            atr
+        )
+
+        range_ratio = _safe_ratio(
+            candle_range,
+            avg_range,
+            1.0
+        )
+
+        volume_ratio = _safe_ratio(
+            current_volume,
+            avg_volume,
+            0.0
+        )
+
+        breakout_buy = (
+            c > prev_high20
+        )
+
+        breakout_sell = (
+            c < prev_low20
+        )
+
+        fake_breakout_buy = (
+            l < prev_low20
+            and c > prev_low20
+        )
+
+        fake_breakout_sell = (
+            h > prev_high20
+            and c < prev_high20
+        )
+
+        rejection_buy = (
+            lower_wick >= body * 1.2
+            and close_location >= 0.65
+        )
+
+        rejection_sell = (
+            upper_wick >= body * 1.2
+            and close_location <= 0.35
+        )
+
+        pullback_buy = (
+            (prev_c - prev_o) < 0
+            and (c - o) > 0
+            and c > prev_c
+        )
+
+        pullback_sell = (
+            (prev_c - prev_o) > 0
+            and (c - o) < 0
+            and c < prev_c
+        )
+
+        buy = 0
+        sell = 0
+
         reasons = []
+
         if impulse >= 0.35 and velocity > 0:
-            buy += 18; reasons.append("bullish impulse")
+
+            buy += 18
+            reasons.append(
+                "bullish impulse"
+            )
+
         elif impulse <= -0.35 and velocity < 0:
-            sell += 18; reasons.append("bearish impulse")
-        if velocity >= 0.20: buy += 12
-        elif velocity <= -0.20: sell += 12
-        if body_ratio >= 0.55 and close_location >= 0.70: buy += 12
-        elif body_ratio >= 0.55 and close_location <= 0.30: sell += 12
+
+            sell += 18
+            reasons.append(
+                "bearish impulse"
+            )
+
+        if velocity >= 0.20:
+            buy += 12
+
+        elif velocity <= -0.20:
+            sell += 12
+
+        if (
+            body_ratio >= 0.55
+            and close_location >= 0.70
+        ):
+
+            buy += 12
+
+        elif (
+            body_ratio >= 0.55
+            and close_location <= 0.30
+        ):
+
+            sell += 12
+
         if range_ratio >= 1.25:
-            if c > o: buy += 10
-            elif c < o: sell += 10
+
+            if c > o:
+                buy += 10
+
+            elif c < o:
+                sell += 10
+
         if volume_ratio >= 1.20:
-            if c > o: buy += 12
-            elif c < o: sell += 12
+
+            if c > o:
+                buy += 12
+
+            elif c < o:
+                sell += 12
+
         elif volume_ratio >= 1.05:
-            if c > o: buy += 5
-            elif c < o: sell += 5
-        if breakout_buy: buy += 15; reasons.append("20-bar upside breakout")
-        if breakout_sell: sell += 15; reasons.append("20-bar downside breakout")
-        if fake_breakout_buy: buy += 10; sell = max(0, sell - 8); reasons.append("bullish liquidity sweep")
-        if fake_breakout_sell: sell += 10; buy = max(0, buy - 8); reasons.append("bearish liquidity sweep")
-        if rejection_buy: buy += 8
-        if rejection_sell: sell += 8
-        if pullback_buy: buy += 8
-        if pullback_sell: sell += 8
-        buy, sell = max(0, min(100, buy)), max(0, min(100, sell))
-        score = int(max(0, min(100, 50 + (buy - sell) * 0.5)))
-        if buy > sell and buy >= MIN_MICRO_SCORE: direction = "BUY"
-        elif sell > buy and sell >= MIN_MICRO_SCORE: direction = "SELL"
-        else: direction = "NEUTRAL"
+
+            if c > o:
+                buy += 5
+
+            elif c < o:
+                sell += 5
+
+        if breakout_buy:
+
+            buy += 15
+            reasons.append(
+                "20-bar upside breakout"
+            )
+
+        if breakout_sell:
+
+            sell += 15
+            reasons.append(
+                "20-bar downside breakout"
+            )
+
+        if fake_breakout_buy:
+
+            buy += 10
+            sell = max(
+                0,
+                sell - 8
+            )
+
+            reasons.append(
+                "bullish liquidity sweep"
+            )
+
+        if fake_breakout_sell:
+
+            sell += 10
+            buy = max(
+                0,
+                buy - 8
+            )
+
+            reasons.append(
+                "bearish liquidity sweep"
+            )
+
+        if rejection_buy:
+            buy += 8
+
+        if rejection_sell:
+            sell += 8
+
+        if pullback_buy:
+            buy += 8
+
+        if pullback_sell:
+            sell += 8
+
+        buy = max(
+            0,
+            min(100, buy)
+        )
+
+        sell = max(
+            0,
+            min(100, sell)
+        )
+
+        score = int(
+            max(
+                0,
+                min(
+                    100,
+                    50
+                    + (buy - sell) * 0.5
+                )
+            )
+        )
+
+        if (
+            buy > sell
+            and buy >= MIN_MICRO_SCORE
+        ):
+
+            direction = "BUY"
+
+        elif (
+            sell > buy
+            and sell >= MIN_MICRO_SCORE
+        ):
+
+            direction = "SELL"
+
+        else:
+
+            direction = "NEUTRAL"
+
         return {
-            "buy_score": buy, "sell_score": sell, "score": score,
-            "direction": direction, "impulse": impulse, "velocity": velocity,
-            "range_ratio": range_ratio, "volume_ratio": volume_ratio,
-            "breakout_buy": breakout_buy, "breakout_sell": breakout_sell,
-            "fake_breakout_buy": fake_breakout_buy, "fake_breakout_sell": fake_breakout_sell,
-            "rejection_buy": rejection_buy, "rejection_sell": rejection_sell,
-            "pullback_buy": pullback_buy, "pullback_sell": pullback_sell,
-            "reason": ", ".join(reasons) if reasons else "No strong microstructure event",
+            "buy_score": buy,
+            "sell_score": sell,
+            "score": score,
+            "direction": direction,
+            "impulse": impulse,
+            "velocity": velocity,
+            "range_ratio": range_ratio,
+            "volume_ratio": volume_ratio,
+            "breakout_buy": breakout_buy,
+            "breakout_sell": breakout_sell,
+            "fake_breakout_buy": fake_breakout_buy,
+            "fake_breakout_sell": fake_breakout_sell,
+            "rejection_buy": rejection_buy,
+            "rejection_sell": rejection_sell,
+            "pullback_buy": pullback_buy,
+            "pullback_sell": pullback_sell,
+            "reason": (
+                ", ".join(reasons)
+                if reasons
+                else
+                "No strong microstructure event"
+            ),
         }
+
     except Exception as e:
-        print(f"Microstructure error: {e}")
+
+        print(
+            f"Microstructure error: {e}"
+        )
+
         return neutral
 
 
-def microstructure_confirms(signal, micro):
+def microstructure_confirms(
+    signal,
+    micro
+):
+
     if signal == "🟢 BUY":
-        return micro.get("direction") == "BUY" or micro.get("buy_score", 0) >= MIN_MICRO_SCORE
+
+        return (
+            micro.get("direction")
+            == "BUY"
+            or
+            micro.get(
+                "buy_score",
+                0
+            ) >= MIN_MICRO_SCORE
+        )
+
     if signal == "🔴 SELL":
-        return micro.get("direction") == "SELL" or micro.get("sell_score", 0) >= MIN_MICRO_SCORE
+
+        return (
+            micro.get("direction")
+            == "SELL"
+            or
+            micro.get(
+                "sell_score",
+                0
+            ) >= MIN_MICRO_SCORE
+        )
+
     return False
 
 
@@ -1668,7 +2368,15 @@ def analyze_market(
             f"{'=' * 60}"
         )
 
-        if is_weekend() and symbol not in {x[0] for x in CRYPTO_MARKETS}:
+        # Gold + Forex closed on weekends.
+        # Crypto remains active 24/7.
+        if (
+            is_weekend()
+            and symbol not in {
+                x[0]
+                for x in CRYPTO_MARKETS
+            }
+        ):
 
             print(
                 f"{name}: "
@@ -1722,33 +2430,130 @@ def analyze_market(
             "1h"
         )
 
-        h4 = resample_h4(h1) if H4_ENABLED else None
-        m1 = prepare_data(symbol, "1m") if M1_ENABLED else None
-
         if (
             m5 is None
             or m15 is None
             or h1 is None
-            or (H4_ENABLED and h4 is None)
-            or (M1_ENABLED and m1 is None)
         ):
 
             print(
                 f"{name}: "
-                f"Missing timeframe data"
+                f"Missing required timeframe data"
             )
 
             return None
 
         # ====================================================
+        # H4
+        # ====================================================
+
+        h4 = (
+            resample_h4(h1)
+            if H4_ENABLED
+            else None
+        )
+
+        if (
+            H4_ENABLED
+            and h4 is None
+        ):
+
+            print(
+                f"{name}: "
+                f"H4 unavailable - "
+                f"continuing without H4"
+            )
+
+        # ====================================================
+        # M1
+        # ====================================================
+        # M1 is optional timing confirmation.
+        # Yahoo Finance can temporarily refuse 1m data.
+        # Therefore M1 failure MUST NOT kill Crypto analysis.
+
+        m1 = None
+
+        if M1_ENABLED:
+
+            try:
+
+                m1 = prepare_data(
+                    symbol,
+                    "1m"
+                )
+
+            except Exception as e:
+
+                print(
+                    f"{name}: "
+                    f"M1 error: {e}"
+                )
+
+                m1 = None
+
+            if m1 is None:
+
+                print(
+                    f"{name}: "
+                    f"M1 unavailable - "
+                    f"continuing without M1"
+                )
+
+        # ====================================================
         # V4 REGIME + MULTI-TIMEFRAME CONTEXT
         # ====================================================
-        regime = market_regime(h1) if REGIME_ENABLED else {"name": "UNKNOWN", "trend": 0, "strength": 0.0, "volatility": "UNKNOWN"}
-        h4_regime = market_regime(h4) if h4 is not None else {"trend": 0, "strength": 0.0, "name": "UNKNOWN", "volatility": "UNKNOWN"}
-        m15_regime = market_regime(m15)
-        m1_regime = market_regime(m1) if m1 is not None else {"trend": 0, "strength": 0.0, "name": "UNKNOWN", "volatility": "UNKNOWN"}
+
+        regime = (
+            market_regime(h1)
+            if REGIME_ENABLED
+            else {
+                "name": "UNKNOWN",
+                "trend": 0,
+                "strength": 0.0,
+                "volatility": "UNKNOWN"
+            }
+        )
+
+        h4_regime = (
+            market_regime(h4)
+            if h4 is not None
+            else {
+                "trend": 0,
+                "strength": 0.0,
+                "name": "UNKNOWN",
+                "volatility": "UNKNOWN"
+            }
+        )
+
+        m15_regime = market_regime(
+            m15
+        )
+
+        m1_regime = (
+            market_regime(m1)
+            if m1 is not None
+            else {
+                "trend": 0,
+                "strength": 0.0,
+                "name": "UNKNOWN",
+                "volatility": "UNKNOWN"
+            }
+        )
+
         risk_profile = adaptive_risk()
-        print(f"{name}: V4 regime H4={h4_regime['name']}/{h4_regime['trend']} H1={regime['name']}/{regime['trend']} M15={m15_regime['trend']} M1={m1_regime['trend']} Risk={risk_profile['mode']} {risk_profile['risk_pct']:.2f}%")
+
+        print(
+            f"{name}: "
+            f"V4 regime "
+            f"H4={h4_regime['name']}/"
+            f"{h4_regime['trend']} "
+            f"H1={regime['name']}/"
+            f"{regime['trend']} "
+            f"M15={m15_regime['trend']} "
+            f"M1={m1_regime['trend']} "
+            f"Risk={risk_profile['mode']} "
+            f"{risk_profile['risk_pct']:.2f}%"
+        )
 
         dxy = None
 
@@ -2008,6 +2813,7 @@ def analyze_market(
             m15_e50 is None
             or m15_e200 is None
         ):
+
             return None
 
         m15_bullish = (
@@ -2042,6 +2848,7 @@ def analyze_market(
             h1_e50 is None
             or h1_e200 is None
         ):
+
             return None
 
         h1_bullish = (
@@ -2055,7 +2862,10 @@ def analyze_market(
         v = volume.fillna(0)
 
         current_volume = (
-            safe_float(v, -2)
+            safe_float(
+                v,
+                -2
+            )
             or 0.0
         )
 
@@ -2086,15 +2896,26 @@ def analyze_market(
         )
 
         # ====================================================
-        # V3.1 MICROSTRUCTURE / HFT-STYLE ANALYSIS
+        # MICROSTRUCTURE
         # ====================================================
+
         micro = analyze_microstructure(
-            open_price, close, high, low, volume, atr_value
+            open_price,
+            close,
+            high,
+            low,
+            volume,
+            atr_value
         )
+
         print(
-            f"{name}: Microstructure BUY={micro['buy_score']} "
-            f"SELL={micro['sell_score']} DIR={micro['direction']} "
-            f"VOLx={micro['volume_ratio']:.2f} RANGEx={micro['range_ratio']:.2f}"
+            f"{name}: "
+            f"Microstructure "
+            f"BUY={micro['buy_score']} "
+            f"SELL={micro['sell_score']} "
+            f"DIR={micro['direction']} "
+            f"VOLx={micro['volume_ratio']:.2f} "
+            f"RANGEx={micro['range_ratio']:.2f}"
         )
 
         # ====================================================
@@ -2136,87 +2957,120 @@ def analyze_market(
         sell_score = 0
 
         if ema_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if macd_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if m15_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
         if h1_bullish:
+
             buy_score += 20
+
         else:
+
             sell_score += 20
 
-        # V4: higher timeframe context is directional guidance, not a hard gate.
+        # H4 contextual bonus
         if h4_regime["trend"] > 0:
+
             buy_score += 8
+
         elif h4_regime["trend"] < 0:
+
             sell_score += 8
 
-        # M1 is timing confirmation only.
+        # M1 timing confirmation
         if m1_regime["trend"] > 0:
+
             buy_score += 5
+
         elif m1_regime["trend"] < 0:
+
             sell_score += 5
 
         if 45 < r < 70:
+
             buy_score += 10
 
         if 30 < r < 55:
+
             sell_score += 10
 
         if adx_value >= 25:
+
             buy_score += 10
             sell_score += 10
 
         if gainz_v2_buy:
+
             buy_score += GAINZ_V2_BONUS
 
         if gainz_v2_sell:
+
             sell_score += GAINZ_V2_BONUS
 
         if gainz_pro_buy:
+
             buy_score += GAINZ_PRO_BONUS
 
         if gainz_pro_sell:
+
             sell_score += GAINZ_PRO_BONUS
 
         if (
             structure["bullish_bos"]
             or structure["bullish_choch"]
         ):
+
             buy_score += 10
 
         if (
             structure["bearish_bos"]
             or structure["bearish_choch"]
         ):
+
             sell_score += 10
 
         if liquidity["bullish"]:
+
             buy_score += 10
 
         if liquidity["bearish"]:
+
             sell_score += 10
 
         if displacement["bullish"]:
+
             buy_score += 5
 
         if displacement["bearish"]:
+
             sell_score += 5
 
         if fvg["bullish"]:
+
             buy_score += 5
 
         if fvg["bearish"]:
+
             sell_score += 5
 
         # ====================================================
@@ -2601,12 +3455,34 @@ def analyze_market(
             gainz_pro_confirmed
         )
 
-        # Soft microstructure contribution.
-        micro_confirmed = microstructure_confirms(signal, micro)
+        # Soft microstructure contribution
+        micro_confirmed = (
+            microstructure_confirms(
+                signal,
+                micro
+            )
+        )
+
         if micro_confirmed:
-            quality_score = min(100, quality_score + MICRO_BONUS)
-        elif micro.get("direction") not in ("NEUTRAL", None):
-            quality_score = max(0, quality_score - MICRO_PENALTY)
+
+            quality_score = min(
+                100,
+                quality_score
+                + MICRO_BONUS
+            )
+
+        elif micro.get(
+            "direction"
+        ) not in (
+            "NEUTRAL",
+            None
+        ):
+
+            quality_score = max(
+                0,
+                quality_score
+                - MICRO_PENALTY
+            )
 
         # ====================================================
         # FINAL AI SCORE
@@ -2766,13 +3642,27 @@ def analyze_market(
 
             return None
 
-        # Optional strict microstructure gate. OFF by default.
-        if MICROSTRUCTURE_ENABLED and MICROSTRUCTURE_HARD_FILTER:
-            if not microstructure_confirms(filtered_signal, micro):
+        # ====================================================
+        # OPTIONAL MICROSTRUCTURE HARD GATE
+        # ====================================================
+
+        if (
+            MICROSTRUCTURE_ENABLED
+            and MICROSTRUCTURE_HARD_FILTER
+        ):
+
+            if not microstructure_confirms(
+                filtered_signal,
+                micro
+            ):
+
                 print(
-                    f"{name}: V3.1 MICRO REJECTED - "
-                    f"score={micro['score']} direction={micro['direction']}"
+                    f"{name}: "
+                    f"MICRO REJECTED - "
+                    f"score={micro['score']} "
+                    f"direction={micro['direction']}"
                 )
+
                 return None
 
         # ====================================================
@@ -2867,48 +3757,6 @@ def analyze_market(
             symbol
         )
 
-        structure_status = (
-            "CONFIRMED"
-            if structure_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        liquidity_status = (
-            "CONFIRMED"
-            if liquidity_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        fvg_status = (
-            "CONFIRMED"
-            if fvg_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        displacement_status = (
-            "CONFIRMED"
-            if displacement_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        dxy_status = (
-            "CONFIRMED"
-            if dxy_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        gainz_v2_status = (
-            "CONFIRMED"
-            if gainz_v2_confirmed
-            else "NOT CONFIRMED"
-        )
-
-        gainz_pro_status = (
-            "CONFIRMED"
-            if gainz_pro_confirmed
-            else "NOT CONFIRMED"
-        )
-
         reasons = [
             "Master V3 hard filters passed",
             "AI Score 80+",
@@ -2964,45 +3812,22 @@ def analyze_market(
             )
 
         reasons.append(
-            f"Microstructure V3.1: {micro['direction']} "
-            f"score={micro['score']} BUY={micro['buy_score']} SELL={micro['sell_score']}"
+            f"Microstructure: "
+            f"{micro['direction']} "
+            f"score={micro['score']} "
+            f"BUY={micro['buy_score']} "
+            f"SELL={micro['sell_score']}"
         )
+
         if micro_confirmed:
-            reasons.append("Microstructure confirmation +5")
+
+            reasons.append(
+                "Microstructure confirmation +5"
+            )
 
         reasons_text = "\n".join(
             "✅ " + x
             for x in reasons
-        )
-
-        volume_status = (
-            "CONFIRMED"
-            if volume_confirmed
-            else "LOW"
-        )
-
-        v2_buy_status = (
-            "YES"
-            if gainz_v2_buy
-            else "NO"
-        )
-
-        v2_sell_status = (
-            "YES"
-            if gainz_v2_sell
-            else "NO"
-        )
-
-        pro_buy_status = (
-            "YES"
-            if gainz_pro_buy
-            else "NO"
-        )
-
-        pro_sell_status = (
-            "YES"
-            if gainz_pro_sell
-            else "NO"
         )
 
         return f"""📊 {name} {direction} NOW {p(price)}
@@ -3013,8 +3838,21 @@ def analyze_market(
 🎯 TP3: {p(tp3)}
 
 AI Score: {final_ai_score}/100
-Regime: {regime['name']} | H4: {h4_regime['trend']} | H1: {regime['trend']} | M15: {m15_regime['trend']} | M1: {m1_regime['trend']}
-Risk Mode: {risk_profile['mode']} | Risk: {risk_profile['risk_pct']:.2f}%
+Quality Score: {quality_score}/100
+Smart Score: {smart_score}/100
+
+Regime:
+H4={h4_regime['trend']}
+H1={regime['trend']}
+M15={m15_regime['trend']}
+M1={m1_regime['trend']}
+
+Risk Mode:
+{risk_profile['mode']} | {risk_profile['risk_pct']:.2f}%
+
+Microstructure:
+{micro['direction']} | Score {micro['score']}
+
 QuantumGold Adaptive Scalping V4"""
 
     except Exception as e:
@@ -3062,7 +3900,7 @@ async def main():
     )
 
     print(
-        "Markets: Gold + Forex"
+        "Markets: Gold + Forex + Crypto"
     )
 
     print(
@@ -3079,9 +3917,21 @@ async def main():
     )
 
     print(
-        "Microstructure V3.1: "
+        "Microstructure: "
         f"{'ENABLED' if MICROSTRUCTURE_ENABLED else 'DISABLED'} | "
-        f"Hard Gate={'ON' if MICROSTRUCTURE_HARD_FILTER else 'OFF'}"
+        f"Hard Gate="
+        f"{'ON' if MICROSTRUCTURE_HARD_FILTER else 'OFF'}"
+    )
+
+    print(
+        "H4 Context: "
+        f"{'ENABLED' if H4_ENABLED else 'DISABLED'}"
+    )
+
+    print(
+        "M1 Timing: "
+        f"{'ENABLED' if M1_ENABLED else 'DISABLED'} | "
+        "OPTIONAL"
     )
 
     crypto_status = (
@@ -3094,14 +3944,6 @@ async def main():
         "Crypto signal delivery: "
         f"{crypto_status}"
     )
-
-    if is_weekend() and not CRYPTO_ENABLED:
-
-        print(
-            "Weekend - Gold/Forex closed; Crypto disabled"
-        )
-
-        return
 
     if not TOKEN:
 
@@ -3213,7 +4055,7 @@ Total Signals:
 ━━━━━━━━━━━━━━━━━━━━
 
 Mode:
-MASTER FILTER V3
+ADAPTIVE SCALPING V4
 
 Minimum AI:
 {MIN_AI_SCORE}
@@ -3261,6 +4103,20 @@ Displacement:
 DXY:
 +5 for Gold
 
+━━━━━━━━━━━━━━━━━━━━
+
+Microstructure:
+ENABLED
+
+Micro Hard Gate:
+{'ON' if MICROSTRUCTURE_HARD_FILTER else 'OFF'}
+
+H4 Context:
+{'ENABLED' if H4_ENABLED else 'DISABLED'}
+
+M1 Timing:
+{'ENABLED' if M1_ENABLED else 'DISABLED / OPTIONAL'}
+
 Crypto:
 {crypto_report_status}
 """
@@ -3291,3 +4147,4 @@ Crypto:
 if __name__ == "__main__":
 
     asyncio.run(main())
+```
