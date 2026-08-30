@@ -1,3 +1,4 @@
+```python
 import os
 import asyncio
 import datetime
@@ -67,7 +68,9 @@ REGIME_ENABLED = True
 # RISK
 # ============================================================
 
-ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "1000"))
+ACCOUNT_BALANCE = float(
+    os.getenv("ACCOUNT_BALANCE", "1000")
+)
 
 BASE_RISK_PCT = float(
     os.getenv("BASE_RISK_PCT", "1.0")
@@ -135,22 +138,17 @@ MICRO_PENALTY = 5
 
 
 # ============================================================
-# NEW STRATEGY
 # TREND + BREAKOUT/PULLBACK + CONFIRMATION
 # ============================================================
 
 TREND_PULLBACK_ENABLED = True
-
 TREND_PULLBACK_HARD_FILTER = False
 
 TREND_PULLBACK_BONUS = 8
-
 TREND_PULLBACK_MIN_SCORE = 60
 
 PULLBACK_LOOKBACK = 12
-
 BREAKOUT_LOOKBACK = 20
-
 TRENDLINE_LOOKBACK = 30
 
 PULLBACK_ATR_MIN = 0.15
@@ -209,13 +207,14 @@ def is_weekend():
 def safe_float(series, index=-1):
 
     try:
-
         value = float(series.iloc[index])
 
-        return value if math.isfinite(value) else None
+        if math.isfinite(value):
+            return value
+
+        return None
 
     except Exception:
-
         return None
 
 
@@ -235,7 +234,7 @@ def resample_h4(df):
         if len(x) > 1:
             x = x.iloc[:-1].copy()
 
-        return (
+        result = (
             x.resample("4h")
             .agg({
                 "open": "first",
@@ -247,7 +246,13 @@ def resample_h4(df):
             .dropna()
         )
 
-    except Exception:
+        return result
+
+    except Exception as e:
+
+        print(
+            f"H4 resample error: {e}"
+        )
 
         return None
 
@@ -258,14 +263,19 @@ def resample_h4(df):
 
 def market_regime(df):
 
-    if df is None or df.empty or len(df) < 60:
+    neutral = {
+        "name": "UNKNOWN",
+        "trend": 0,
+        "strength": 0.0,
+        "volatility": "UNKNOWN",
+    }
 
-        return {
-            "name": "UNKNOWN",
-            "trend": 0,
-            "strength": 0.0,
-            "volatility": "UNKNOWN",
-        }
+    if (
+        df is None
+        or df.empty
+        or len(df) < 60
+    ):
+        return neutral
 
     try:
 
@@ -297,11 +307,20 @@ def market_regime(df):
             200
         )
 
-        a = safe_float(adx, -2) or 0.0
-        av = safe_float(atr, -2) or 0.0
+        a = safe_float(adx, -2)
 
-        e5 = safe_float(e50, -2) or 0.0
-        e2 = safe_float(e200, -2) or 0.0
+        av = safe_float(atr, -2)
+
+        e5 = safe_float(e50, -2)
+        e2 = safe_float(e200, -2)
+
+        if (
+            a is None
+            or av is None
+            or e5 is None
+            or e2 is None
+        ):
+            return neutral
 
         trend = (
             1
@@ -317,7 +336,10 @@ def market_regime(df):
             else "RANGE"
         )
 
-        if av > 0 and len(atr.dropna()) >= 40:
+        if (
+            av > 0
+            and len(atr.dropna()) >= 40
+        ):
 
             med = float(
                 atr.dropna()
@@ -344,14 +366,13 @@ def market_regime(df):
             "volatility": volatility,
         }
 
-    except Exception:
+    except Exception as e:
 
-        return {
-            "name": "UNKNOWN",
-            "trend": 0,
-            "strength": 0.0,
-            "volatility": "UNKNOWN",
-        }
+        print(
+            f"Market regime error: {e}"
+        )
+
+        return neutral
 
 
 # ============================================================
@@ -360,11 +381,17 @@ def market_regime(df):
 
 def adaptive_risk(balance=None):
 
-    b = float(
-        balance
-        if balance is not None
-        else ACCOUNT_BALANCE
-    )
+    try:
+
+        b = float(
+            balance
+            if balance is not None
+            else ACCOUNT_BALANCE
+        )
+
+    except Exception:
+
+        b = ACCOUNT_BALANCE
 
     pct = (
         MICRO_RISK_PCT
@@ -374,7 +401,10 @@ def adaptive_risk(balance=None):
 
     pct = max(
         0.1,
-        min(MAX_RISK_PCT, pct)
+        min(
+            MAX_RISK_PCT,
+            pct
+        )
     )
 
     return {
@@ -572,65 +602,73 @@ def find_recent_swings(
     highs = []
     lows = []
 
-    start = max(
-        lookback,
-        len(high) - STRUCTURE_LOOKBACK
-    )
+    try:
 
-    for i in range(
-        start,
-        len(high) - lookback
-    ):
-
-        current_high = float(
-            high.iloc[i]
+        start = max(
+            lookback,
+            len(high) - STRUCTURE_LOOKBACK
         )
 
-        current_low = float(
-            low.iloc[i]
-        )
-
-        left_high = float(
-            high.iloc[
-                i - lookback:i
-            ].max()
-        )
-
-        right_high = float(
-            high.iloc[
-                i + 1:i + lookback + 1
-            ].max()
-        )
-
-        left_low = float(
-            low.iloc[
-                i - lookback:i
-            ].min()
-        )
-
-        right_low = float(
-            low.iloc[
-                i + 1:i + lookback + 1
-            ].min()
-        )
-
-        if (
-            current_high > left_high
-            and current_high > right_high
+        for i in range(
+            start,
+            len(high) - lookback
         ):
 
-            highs.append(
-                (i, current_high)
+            current_high = float(
+                high.iloc[i]
             )
 
-        if (
-            current_low < left_low
-            and current_low < right_low
-        ):
-
-            lows.append(
-                (i, current_low)
+            current_low = float(
+                low.iloc[i]
             )
+
+            left_high = float(
+                high.iloc[
+                    i - lookback:i
+                ].max()
+            )
+
+            right_high = float(
+                high.iloc[
+                    i + 1:i + lookback + 1
+                ].max()
+            )
+
+            left_low = float(
+                low.iloc[
+                    i - lookback:i
+                ].min()
+            )
+
+            right_low = float(
+                low.iloc[
+                    i + 1:i + lookback + 1
+                ].min()
+            )
+
+            if (
+                current_high > left_high
+                and current_high > right_high
+            ):
+
+                highs.append(
+                    (i, current_high)
+                )
+
+            if (
+                current_low < left_low
+                and current_low < right_low
+            ):
+
+                lows.append(
+                    (i, current_low)
+                )
+
+    except Exception as e:
+
+        print(
+            f"Swing detection error: {e}"
+        )
 
     return highs, lows
 
@@ -696,14 +734,12 @@ def analyze_structure(
 
             "bullish_choch": (
                 len(recent_highs) >= 2
-                and last_close
-                > recent_highs[-2][1]
+                and last_close > recent_highs[-2][1]
             ),
 
             "bearish_choch": (
                 len(recent_lows) >= 2
-                and last_close
-                < recent_lows[-2][1]
+                and last_close < recent_lows[-2][1]
             ),
         }
 
@@ -808,7 +844,6 @@ def detect_fvg(
             i < 2
             or atr_value <= 0
         ):
-
             return neutral
 
         bullish_gap = (
@@ -821,9 +856,7 @@ def detect_fvg(
             - float(high.iloc[i])
         )
 
-        minimum_gap = (
-            atr_value * 0.05
-        )
+        minimum_gap = atr_value * 0.05
 
         return {
             "bullish": (
@@ -869,7 +902,6 @@ def detect_displacement(
             i < 1
             or atr_value <= 0
         ):
-
             return neutral
 
         previous_close = float(
@@ -896,20 +928,17 @@ def detect_displacement(
 
         strong = (
             body >= atr_value * 0.60
-            and candle_range
-            >= atr_value * 0.80
+            and candle_range >= atr_value * 0.80
         )
 
         return {
             "bullish": (
-                current_close
-                > previous_close
+                current_close > previous_close
                 and strong
             ),
 
             "bearish": (
-                current_close
-                < previous_close
+                current_close < previous_close
                 and strong
             ),
         }
@@ -981,10 +1010,7 @@ def detect_gainzalgo(
             low.iloc[i]
         )
 
-        tr1 = (
-            current_high
-            - current_low
-        )
+        tr1 = current_high - current_low
 
         tr2 = abs(
             current_high
@@ -1031,8 +1057,7 @@ def detect_gainzalgo(
         )
 
         rsi_sell = (
-            rsi_value
-            > 100 - rsi_limit
+            rsi_value > 100 - rsi_limit
         )
 
         close_delta = float(
@@ -1129,31 +1154,18 @@ def analyze_microstructure(
     try:
 
         i = len(close) - 2
-
         atr = float(atr_value)
 
         if (
             i < 25
             or atr <= 0
         ):
-
             return neutral
 
-        o = float(
-            open_price.iloc[i]
-        )
-
-        c = float(
-            close.iloc[i]
-        )
-
-        h = float(
-            high.iloc[i]
-        )
-
-        l = float(
-            low.iloc[i]
-        )
+        o = float(open_price.iloc[i])
+        c = float(close.iloc[i])
+        h = float(high.iloc[i])
+        l = float(low.iloc[i])
 
         prev_c = float(
             close.iloc[i - 1]
@@ -1206,9 +1218,7 @@ def analyze_microstructure(
 
         candle_range = h - l
 
-        body = abs(
-            c - o
-        )
+        body = abs(c - o)
 
         body_ratio = (
             body / candle_range
@@ -1250,13 +1260,8 @@ def analyze_microstructure(
             else 0.0
         )
 
-        breakout_buy = (
-            c > prev_high20
-        )
-
-        breakout_sell = (
-            c < prev_low20
-        )
+        breakout_buy = c > prev_high20
+        breakout_sell = c < prev_low20
 
         fake_breakout_buy = (
             l < prev_low20
@@ -1473,8 +1478,7 @@ def analyze_microstructure(
             "reason": (
                 ", ".join(reasons)
                 if reasons
-                else
-                "No strong microstructure event"
+                else "No strong microstructure event"
             ),
         }
 
@@ -1499,28 +1503,29 @@ def microstructure_confirms(
     if signal == "🟢 BUY":
 
         return (
-            micro.get("direction")
-            == "BUY"
+            micro.get("direction") == "BUY"
             or
-            micro.get("buy_score", 0)
-            >= MIN_MICRO_SCORE
+            micro.get(
+                "buy_score",
+                0
+            ) >= MIN_MICRO_SCORE
         )
 
     if signal == "🔴 SELL":
 
         return (
-            micro.get("direction")
-            == "SELL"
+            micro.get("direction") == "SELL"
             or
-            micro.get("sell_score", 0)
-            >= MIN_MICRO_SCORE
+            micro.get(
+                "sell_score",
+                0
+            ) >= MIN_MICRO_SCORE
         )
 
     return False
 
 
 # ============================================================
-# NEW:
 # TREND PULLBACK CONFIRMATION ENGINE
 # ============================================================
 
@@ -1557,8 +1562,10 @@ def analyze_trend_pullback_strategy(
     }
 
     if not TREND_PULLBACK_ENABLED:
+
         result["valid"] = True
         result["reason"] = "Strategy disabled"
+
         return result
 
     try:
@@ -1572,14 +1579,6 @@ def analyze_trend_pullback_strategy(
             close.iloc[i]
         )
 
-        current_high = float(
-            high.iloc[i]
-        )
-
-        current_low = float(
-            low.iloc[i]
-        )
-
         atr = float(
             atr_value
         )
@@ -1590,8 +1589,14 @@ def analyze_trend_pullback_strategy(
         bullish = signal == "🟢 BUY"
         bearish = signal == "🔴 SELL"
 
+        if not (
+            bullish
+            or bearish
+        ):
+            return result
+
         # ----------------------------------------------------
-        # 1. MULTI-TIMEFRAME TREND
+        # 1. MTF TREND
         # ----------------------------------------------------
 
         if bullish:
@@ -1604,7 +1609,7 @@ def analyze_trend_pullback_strategy(
                 ]
             )
 
-        elif bearish:
+        else:
 
             trend_votes = sum(
                 [
@@ -1613,10 +1618,6 @@ def analyze_trend_pullback_strategy(
                     m15_trend < 0,
                 ]
             )
-
-        else:
-
-            return result
 
         trend_aligned = (
             trend_votes >= 2
@@ -1631,31 +1632,35 @@ def analyze_trend_pullback_strategy(
 
         level_confirmed = False
 
-        distance_support = abs(
-            current_close - float(support)
-        )
+        try:
 
-        distance_resistance = abs(
-            current_close - float(resistance)
-        )
+            distance_support = abs(
+                current_close
+                - float(support)
+            )
 
-        if bullish:
+            distance_resistance = abs(
+                current_close
+                - float(resistance)
+            )
 
-            if (
-                distance_support
-                <= atr * 1.50
-            ):
+            if bullish:
 
-                level_confirmed = True
+                level_confirmed = (
+                    distance_support
+                    <= atr * 1.50
+                )
 
-        elif bearish:
+            else:
 
-            if (
-                distance_resistance
-                <= atr * 1.50
-            ):
+                level_confirmed = (
+                    distance_resistance
+                    <= atr * 1.50
+                )
 
-                level_confirmed = True
+        except Exception:
+
+            level_confirmed = False
 
         if level_confirmed:
             result["score"] += 15
@@ -1677,8 +1682,6 @@ def analyze_trend_pullback_strategy(
             low.iloc[start:i].min()
         )
 
-        breakout = False
-
         if bullish:
 
             breakout = (
@@ -1686,7 +1689,7 @@ def analyze_trend_pullback_strategy(
                 > previous_high
             )
 
-        elif bearish:
+        else:
 
             breakout = (
                 current_close
@@ -1694,7 +1697,6 @@ def analyze_trend_pullback_strategy(
             )
 
         if breakout:
-
             result["score"] += 20
 
         # ----------------------------------------------------
@@ -1735,7 +1737,7 @@ def analyze_trend_pullback_strategy(
                 <= atr * PULLBACK_ATR_MAX
             )
 
-        elif bearish:
+        else:
 
             pullback_distance = (
                 current_close
@@ -1751,14 +1753,11 @@ def analyze_trend_pullback_strategy(
             )
 
         if pullback:
-
             result["score"] += 15
 
         # ----------------------------------------------------
         # 5. RETEST / STRUCTURE
         # ----------------------------------------------------
-
-        retest = False
 
         if bullish:
 
@@ -1779,7 +1778,7 @@ def analyze_trend_pullback_strategy(
                 )
             )
 
-        elif bearish:
+        else:
 
             retest = (
                 structure.get(
@@ -1799,14 +1798,11 @@ def analyze_trend_pullback_strategy(
             )
 
         if retest:
-
             result["score"] += 10
 
         # ----------------------------------------------------
         # 6. CONFIRMATION
         # ----------------------------------------------------
-
-        confirmation = False
 
         if bullish:
 
@@ -1831,7 +1827,7 @@ def analyze_trend_pullback_strategy(
                 )
             )
 
-        elif bearish:
+        else:
 
             confirmation = (
                 micro.get(
@@ -1855,11 +1851,10 @@ def analyze_trend_pullback_strategy(
             )
 
         if confirmation:
-
             result["score"] += 15
 
         # ----------------------------------------------------
-        # FINAL STRATEGY SCORE
+        # FINAL
         # ----------------------------------------------------
 
         result["score"] = int(
@@ -1875,11 +1870,7 @@ def analyze_trend_pullback_strategy(
         result["direction"] = (
             "BUY"
             if bullish
-            else
-            "SELL"
-            if bearish
-            else
-            "NEUTRAL"
+            else "SELL"
         )
 
         result["trend_aligned"] = (
@@ -1893,15 +1884,6 @@ def analyze_trend_pullback_strategy(
         result["level_confirmed"] = (
             level_confirmed
         )
-
-        # ----------------------------------------------------
-        # CORE VALIDATION
-        #
-        # We require:
-        # Trend + Confirmation
-        # and at least one of:
-        # Pullback / Breakout / Level
-        # ----------------------------------------------------
 
         location_ok = (
             pullback
@@ -1920,40 +1902,27 @@ def analyze_trend_pullback_strategy(
         reasons = []
 
         if trend_aligned:
-            reasons.append(
-                "MTF trend aligned"
-            )
+            reasons.append("MTF trend aligned")
 
         if breakout:
-            reasons.append(
-                "breakout"
-            )
+            reasons.append("breakout")
 
         if pullback:
-            reasons.append(
-                "quality pullback"
-            )
+            reasons.append("quality pullback")
 
         if retest:
-            reasons.append(
-                "structure/retest"
-            )
+            reasons.append("structure/retest")
 
         if confirmation:
-            reasons.append(
-                "confirmation"
-            )
+            reasons.append("confirmation")
 
         if level_confirmed:
-            reasons.append(
-                "key level"
-            )
+            reasons.append("key level")
 
         result["reason"] = (
             ", ".join(reasons)
             if reasons
-            else
-            "No valid trend-pullback setup"
+            else "No valid trend-pullback setup"
         )
 
         return result
@@ -1961,8 +1930,7 @@ def analyze_trend_pullback_strategy(
     except Exception as e:
 
         print(
-            f"Trend Pullback "
-            f"strategy error: {e}"
+            f"Trend Pullback strategy error: {e}"
         )
 
         result["reason"] = (
@@ -2107,7 +2075,6 @@ def calculate_quality_score(
         or
         (sell and not ema_bullish)
     ):
-
         score += 15
 
     if (
@@ -2115,7 +2082,6 @@ def calculate_quality_score(
         or
         (sell and not macd_bullish)
     ):
-
         score += 15
 
     if (
@@ -2123,7 +2089,6 @@ def calculate_quality_score(
         or
         (sell and not m15_bullish)
     ):
-
         score += 10
 
     if (
@@ -2131,7 +2096,6 @@ def calculate_quality_score(
         or
         (sell and not h1_bullish)
     ):
-
         score += 10
 
     if adx_value >= 30:
@@ -2148,6 +2112,10 @@ def calculate_quality_score(
 
     if volume_confirmed:
         score += 10
+
+    # --------------------------------------------------------
+    # FIXED RSI DIRECTION LOGIC
+    # --------------------------------------------------------
 
     if buy:
 
@@ -2211,7 +2179,6 @@ def calculate_quality_score(
         score += GAINZ_PRO_BONUS
 
     if trend_pullback_confirmed:
-
         score += TREND_PULLBACK_BONUS
 
     return max(
@@ -2423,8 +2390,7 @@ def analyze_market(
         ):
 
             print(
-                f"{name}: Missing "
-                f"core timeframe data"
+                f"{name}: Missing core timeframe data"
             )
 
             return None
@@ -2458,18 +2424,18 @@ def analyze_market(
         regime = (
             market_regime(h1)
             if REGIME_ENABLED
-            else
-            {
+            else {
                 "name": "UNKNOWN",
-                "trend": 0
+                "trend": 0,
+                "strength": 0,
+                "volatility": "UNKNOWN",
             }
         )
 
         h4_regime = (
             market_regime(h4)
             if h4 is not None
-            else
-            {"trend": 0}
+            else {"trend": 0}
         )
 
         m15_regime = market_regime(
@@ -2479,8 +2445,7 @@ def analyze_market(
         m1_regime = (
             market_regime(m1)
             if m1 is not None
-            else
-            {"trend": 0}
+            else {"trend": 0}
         )
 
         risk_profile = adaptive_risk()
@@ -2552,19 +2517,28 @@ def analyze_market(
         if not sr:
 
             print(
-                f"{name}: Support/Resistance "
-                f"unavailable"
+                f"{name}: Support/Resistance unavailable"
             )
 
             return None
 
-        support = float(
-            sr["support"]
-        )
+        try:
 
-        resistance = float(
-            sr["resistance"]
-        )
+            support = float(
+                sr["support"]
+            )
+
+            resistance = float(
+                sr["resistance"]
+            )
+
+        except Exception as e:
+
+            print(
+                f"{name}: Invalid S/R: {e}"
+            )
+
+            return None
 
         # ----------------------------------------------------
         # INDICATORS
@@ -2652,8 +2626,7 @@ def analyze_market(
         ):
 
             print(
-                f"{name}: Indicator "
-                f"data unavailable"
+                f"{name}: Indicator data unavailable"
             )
 
             return None
@@ -2781,7 +2754,10 @@ def analyze_market(
         v = volume.fillna(0)
 
         current_volume = (
-            safe_float(v, -2)
+            safe_float(
+                v,
+                -2
+            )
             or 0.0
         )
 
@@ -2920,11 +2896,15 @@ def analyze_market(
 
             sell_score += 5
 
+        # ----------------------------------------------------
+        # FIXED RSI BASE SCORING
+        # ----------------------------------------------------
+
         if 45 < r < 70:
 
             buy_score += 10
 
-        if 30 < r < 55:
+        elif 30 < r < 55:
 
             sell_score += 10
 
@@ -3276,7 +3256,6 @@ def analyze_market(
                 )
 
         # ====================================================
-        # NEW STRATEGY
         # TREND + PULLBACK + CONFIRMATION
         # ====================================================
 
@@ -3328,8 +3307,7 @@ def analyze_market(
         ):
 
             print(
-                f"{name}: Trend-Pullback "
-                f"hard rejection"
+                f"{name}: Trend-Pullback hard rejection"
             )
 
             return None
@@ -3416,8 +3394,7 @@ def analyze_market(
 
             quality_score = min(
                 100,
-                quality_score
-                + MICRO_BONUS
+                quality_score + MICRO_BONUS
             )
 
         elif (
@@ -3430,8 +3407,7 @@ def analyze_market(
 
             quality_score = max(
                 0,
-                quality_score
-                - MICRO_PENALTY
+                quality_score - MICRO_PENALTY
             )
 
         # ----------------------------------------------------
@@ -3483,8 +3459,7 @@ def analyze_market(
         except Exception as e:
 
             print(
-                f"{name}: No-trade filter "
-                f"error: {e}"
+                f"{name}: No-trade filter error: {e}"
             )
 
             filtered_signal = "⚪ WAIT"
@@ -3593,8 +3568,7 @@ def analyze_market(
         except Exception as e:
 
             print(
-                f"{name}: Duplicate "
-                f"filter error: {e}"
+                f"{name}: Duplicate filter error: {e}"
             )
 
             allowed = False
@@ -3602,8 +3576,7 @@ def analyze_market(
         if not allowed:
 
             print(
-                f"{name}: Duplicate "
-                f"signal blocked"
+                f"{name}: Duplicate signal blocked"
             )
 
             return None
@@ -3644,8 +3617,7 @@ def analyze_market(
         direction = (
             "BUY"
             if filtered_signal == "🟢 BUY"
-            else
-            "SELL"
+            else "SELL"
         )
 
         p = lambda x: format_price(
@@ -3760,23 +3732,19 @@ async def main():
     )
 
     print(
-        f"Minimum AI Score: "
-        f"{MIN_AI_SCORE}"
+        f"Minimum AI Score: {MIN_AI_SCORE}"
     )
 
     print(
-        f"Minimum Quality: "
-        f"{MIN_QUALITY_SCORE}"
+        f"Minimum Quality: {MIN_QUALITY_SCORE}"
     )
 
     print(
-        f"Minimum ADX: "
-        f"{MIN_ADX}"
+        f"Minimum ADX: {MIN_ADX}"
     )
 
     print(
-        f"Design Target Win Rate: "
-        f"{TARGET_WIN_RATE}%"
+        f"Design Target Win Rate: {TARGET_WIN_RATE}%"
     )
 
     print(
@@ -3792,8 +3760,7 @@ async def main():
     )
 
     print(
-        "Smart Money confirmations: "
-        "SOFT / BONUS"
+        "Smart Money confirmations: SOFT / BONUS"
     )
 
     print(
@@ -3809,7 +3776,7 @@ async def main():
     print(
         "Microstructure V3.1: "
         f"{'ENABLED' if MICROSTRUCTURE_ENABLED else 'DISABLED'} "
-        "| Hard Gate="
+        f"| Hard Gate="
         f"{'ON' if MICROSTRUCTURE_HARD_FILTER else 'OFF'}"
     )
 
@@ -3820,8 +3787,7 @@ async def main():
     if not TOKEN:
 
         print(
-            "ERROR: "
-            "TELEGRAM_TOKEN not configured"
+            "ERROR: TELEGRAM_TOKEN not configured"
         )
 
         return
@@ -3829,8 +3795,7 @@ async def main():
     if not CHAT_ID:
 
         print(
-            "ERROR: "
-            "TELEGRAM_CHAT_ID not configured"
+            "ERROR: TELEGRAM_CHAT_ID not configured"
         )
 
         return
@@ -3884,8 +3849,7 @@ async def main():
     if not messages:
 
         print(
-            "No MASTER V4 quality "
-            "BUY/SELL signals"
+            "No MASTER V4 quality BUY/SELL signals"
         )
 
         return
@@ -3910,8 +3874,7 @@ async def main():
         )
 
         print(
-            "High quality MASTER V4 "
-            "signals sent"
+            "High quality MASTER V4 signals sent"
         )
 
     except Exception as e:
@@ -3997,3 +3960,4 @@ Crypto:
 if __name__ == "__main__":
 
     asyncio.run(main())
+```
