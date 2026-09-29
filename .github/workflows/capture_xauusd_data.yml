@@ -1,21 +1,33 @@
-name: QuantumGold - Capture XAUUSD Historical Data
+name: QuantumGold - Rapid Burst Data + Backtest
 
 on:
   workflow_dispatch:
 
 jobs:
-  capture-data:
+  rapid-burst-backtest:
     runs-on: ubuntu-latest
 
     steps:
+
+      # ==========================================
+      # 1) Checkout
+      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ==========================================
+      # 2) Python
+      # ==========================================
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+
+      # ==========================================
+      # 3) Install packages
+      # ==========================================
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -25,6 +37,10 @@ jobs:
             pip install -r requirements.txt
           fi
 
+
+      # ==========================================
+      # 4) Capture historical data
+      # ==========================================
       - name: Capture XAUUSD historical data
         env:
           DATA_CAPTURE_MODE: "1"
@@ -32,29 +48,877 @@ jobs:
           DATA_CAPTURE_DIR: "backtest_data"
           DATA_CAPTURE_INTERVALS: "1m,5m,15m"
 
-          ACCOUNT_BALANCE: "50"
-          BASE_RISK_PCT: "1.0"
-          MICRO_ACCOUNT_THRESHOLD: "100"
-          MICRO_RISK_PCT: "1.0"
-          MAX_RISK_PCT: "1.0"
-
         run: |
           python QuantumGold_RapidBurst_Backtest.py
 
-      - name: Show captured files
+
+      # ==========================================
+      # 5) Verify data
+      # ==========================================
+      - name: Verify captured data
         run: |
-          echo "===== BACKTEST DATA ====="
+          echo "======================================"
+          echo "CAPTURED DATA"
+          echo "======================================"
+
           find backtest_data -maxdepth 2 -type f -print
 
+          echo ""
+          echo "======================================"
+          echo "FILE SIZES"
+          echo "======================================"
+
+          ls -lh backtest_data/
+
+          echo ""
+          echo "======================================"
+          echo "MANIFEST"
+          echo "======================================"
+
           if [ -f backtest_data/manifest.csv ]; then
-            echo "===== MANIFEST ====="
             cat backtest_data/manifest.csv
           fi
 
-      - name: Upload historical data
+
+      # ==========================================
+      # 6) Rapid Burst Backtest
+      # ==========================================
+      - name: Run Rapid Burst Backtest
+        run: |
+
+          cat > rapid_burst_engine.py <<'PY'
+          import os
+          import math
+          import numpy as np
+          import pandas as pd
+
+          DATA_DIR = "backtest_data"
+          M1_FILE = os.path.join(DATA_DIR, "GC_F_1m.csv")
+          M5_FILE = os.path.join(DATA_DIR, "GC_F_5m.csv")
+
+          INITIAL_BALANCE = 100.0
+
+          # ------------------------------------------
+          # Rapid Burst parameters
+          # ------------------------------------------
+
+          MAX_BURST_ENTRIES = 5
+
+          # Equal-size entries.
+          # No martingale.
+          ENTRY_SIZE = 0.01
+
+          # Short scalp targets.
+          TP_ATR = 1.00
+          SL_ATR = 0.80
+
+          # Minimum distance between burst entries.
+          ENTRY_SPACING_ATR = 0.35
+
+          # ATR period.
+          ATR_PERIOD = 14
+
+          # M1 momentum settings.
+          FAST_EMA = 9
+          SLOW_EMA = 21
+
+          # RSI confirmation.
+          RSI_PERIOD = 14
+
+          # Breakout lookback.
+          BREAKOUT_LOOKBACK = 3
+
+          # Maximum holding time in minutes.
+          MAX_HOLD_MINUTES = 15
+
+
+          def load_data(path):
+              df = pd.read_csv(path)
+
+              # Try to identify datetime column.
+              possible_datetime = [
+                  "Datetime",
+                  "datetime",
+                  "Date",
+                  "date",
+                  "Time",
+                  "time"
+              ]
+
+              dt_col = None
+
+              for c in possible_datetime:
+                  if c in df.columns:
+                      dt_col = c
+                      break
+
+              # Some Yahoo CSV files contain Date + Time separately.
+              if "Date" in df.columns and "Time" in df.columns:
+                  df["datetime"] = pd.to_datetime(
+                      df["Date"].astype(str) + " " +
+                      df["Time"].astype(str),
+                      utc=True,
+                      errors="coerce"
+                  )
+
+              elif dt_col is not None:
+                  df["datetime"] = pd.to_datetime(
+                      df[dt_col],
+                      utc=True,
+                      errors="coerce"
+                  )
+
+              else:
+                  raise ValueError(
+                      f"Cannot find datetime column in {path}. "
+                      f"Columns={list(df.columns)}"
+                  )
+
+              df = df.dropna(subset=["datetime"]).copy()
+
+              df.columns = [
+                  str(c).strip().lower()
+                  for c in df.columns
+              ]
+
+              rename = {}
+
+              for c in df.columns:
+                  if c == "open":
+                      rename[c] = "open"
+                  elif c == "high":
+                      rename[c] = "high"
+                  elif c == "low":
+                      rename[c] = "low"
+                  elif c == "close":
+                      rename[c] = "close"
+
+              df = df.rename(columns=rename)
+
+              required = ["open", "high", "low", "close"]
+
+              for c in required:
+                  if c not in df.columns:
+                      raise ValueError(
+                          f"Missing {c} in {path}. "
+                          f"Columns={list(df.columns)}"
+                      )
+
+              df = df.sort_values("datetime")
+              df = df.drop_duplicates("datetime")
+              df = df.set_index("datetime")
+
+              for c in required:
+                  df[c] = pd.to_numeric(
+                      df[c],
+                      errors="coerce"
+                  )
+
+              df = df.dropna(subset=required)
+
+              return df
+
+
+          def ema(series, period):
+              return series.ewm(
+                  span=period,
+                  adjust=False
+              ).mean()
+
+
+          def rsi(series, period=14):
+              delta = series.diff()
+
+              gain = delta.clip(lower=0)
+              loss = -delta.clip(upper=0)
+
+              avg_gain = gain.ewm(
+                  alpha=1 / period,
+                  adjust=False
+              ).mean()
+
+              avg_loss = loss.ewm(
+                  alpha=1 / period,
+                  adjust=False
+              ).mean()
+
+              rs = avg_gain / avg_loss.replace(
+                  0,
+                  np.nan
+              )
+
+              out = 100 - (100 / (1 + rs))
+
+              return out.fillna(50)
+
+
+          def atr(df, period=14):
+              prev_close = df["close"].shift(1)
+
+              tr1 = df["high"] - df["low"]
+
+              tr2 = (
+                  df["high"] -
+                  prev_close
+              ).abs()
+
+              tr3 = (
+                  df["low"] -
+                  prev_close
+              ).abs()
+
+              tr = pd.concat(
+                  [tr1, tr2, tr3],
+                  axis=1
+              ).max(axis=1)
+
+              return tr.ewm(
+                  alpha=1 / period,
+                  adjust=False
+              ).mean()
+
+
+          print("")
+          print("==========================================")
+          print("QuantumGold RAPID BURST BACKTEST")
+          print("==========================================")
+          print("")
+
+          m1 = load_data(M1_FILE)
+          m5 = load_data(M5_FILE)
+
+          print(
+              f"M1 rows: {len(m1)} | "
+              f"{m1.index.min()} -> {m1.index.max()}"
+          )
+
+          print(
+              f"M5 rows: {len(m5)} | "
+              f"{m5.index.min()} -> {m5.index.max()}"
+          )
+
+          # ------------------------------------------
+          # M1 indicators
+          # ------------------------------------------
+
+          m1["ema_fast"] = ema(
+              m1["close"],
+              FAST_EMA
+          )
+
+          m1["ema_slow"] = ema(
+              m1["close"],
+              SLOW_EMA
+          )
+
+          m1["rsi"] = rsi(
+              m1["close"],
+              RSI_PERIOD
+          )
+
+          m1["atr"] = atr(
+              m1,
+              ATR_PERIOD
+          )
+
+          # ------------------------------------------
+          # M5 context
+          # ------------------------------------------
+
+          m5["ema_fast"] = ema(
+              m5["close"],
+              FAST_EMA
+          )
+
+          m5["ema_slow"] = ema(
+              m5["close"],
+              SLOW_EMA
+          )
+
+          m5["trend"] = 0
+
+          m5.loc[
+              m5["ema_fast"] > m5["ema_slow"],
+              "trend"
+          ] = 1
+
+          m5.loc[
+              m5["ema_fast"] < m5["ema_slow"],
+              "trend"
+          ] = -1
+
+          # Align last completed M5 context
+          m1["m5_fast"] = m5["ema_fast"].reindex(
+              m1.index,
+              method="ffill"
+          )
+
+          m1["m5_slow"] = m5["ema_slow"].reindex(
+              m1.index,
+              method="ffill"
+          )
+
+          m1["m5_trend"] = m5["trend"].reindex(
+              m1.index,
+              method="ffill"
+          )
+
+          # ------------------------------------------
+          # Backtest
+          # ------------------------------------------
+
+          balance = INITIAL_BALANCE
+
+          trades = []
+
+          burst_direction = None
+          burst_entries = []
+          last_entry_price = None
+          burst_id = 0
+
+          for i in range(
+              max(
+                  SLOW_EMA,
+                  ATR_PERIOD,
+                  BREAKOUT_LOOKBACK
+              ),
+              len(m1)
+          ):
+
+              row = m1.iloc[i]
+
+              if not np.isfinite(row["atr"]):
+                  continue
+
+              price = float(row["close"])
+              atr_value = float(row["atr"])
+
+              if atr_value <= 0:
+                  continue
+
+              # --------------------------------------
+              # Determine M5 direction
+              # --------------------------------------
+
+              m5_direction = int(
+                  row["m5_trend"]
+              )
+
+              # --------------------------------------
+              # M1 momentum
+              # --------------------------------------
+
+              bullish_momentum = (
+                  row["ema_fast"] >
+                  row["ema_slow"]
+                  and row["rsi"] >= 55
+              )
+
+              bearish_momentum = (
+                  row["ema_fast"] <
+                  row["ema_slow"]
+                  and row["rsi"] <= 45
+              )
+
+              # --------------------------------------
+              # Short breakout trigger
+              # --------------------------------------
+
+              previous = m1.iloc[
+                  i - BREAKOUT_LOOKBACK:i
+              ]
+
+              previous_high = previous["high"].max()
+              previous_low = previous["low"].min()
+
+              buy_breakout = (
+                  price >
+                  previous_high
+              )
+
+              sell_breakout = (
+                  price <
+                  previous_low
+              )
+
+              buy_signal = (
+                  m5_direction == 1
+                  and bullish_momentum
+                  and buy_breakout
+              )
+
+              sell_signal = (
+                  m5_direction == -1
+                  and bearish_momentum
+                  and sell_breakout
+              )
+
+              direction = 0
+
+              if buy_signal:
+                  direction = 1
+
+              elif sell_signal:
+                  direction = -1
+
+              # --------------------------------------
+              # Reset burst after direction changes
+              # --------------------------------------
+
+              if direction != 0:
+
+                  if (
+                      burst_direction is not None
+                      and direction != burst_direction
+                  ):
+                      burst_direction = None
+                      burst_entries = []
+                      last_entry_price = None
+
+                  if burst_direction is None:
+                      burst_direction = direction
+                      burst_entries = []
+                      last_entry_price = None
+                      burst_id += 1
+
+                  # ----------------------------------
+                  # Add burst entry
+                  # ----------------------------------
+
+                  allow_entry = (
+                      len(burst_entries)
+                      < MAX_BURST_ENTRIES
+                  )
+
+                  if last_entry_price is not None:
+                      distance = abs(
+                          price -
+                          last_entry_price
+                      )
+
+                      allow_entry = (
+                          allow_entry
+                          and distance >=
+                          atr_value *
+                          ENTRY_SPACING_ATR
+                      )
+
+                  if allow_entry:
+
+                      entry_price = price
+
+                      if direction == 1:
+                          tp = (
+                              entry_price +
+                              atr_value * TP_ATR
+                          )
+
+                          sl = (
+                              entry_price -
+                              atr_value * SL_ATR
+                          )
+
+                      else:
+                          tp = (
+                              entry_price -
+                              atr_value * TP_ATR
+                          )
+
+                          sl = (
+                              entry_price +
+                              atr_value * SL_ATR
+                          )
+
+                      entry_time = row.name
+
+                      burst_entries.append({
+                          "direction": direction,
+                          "entry": entry_price,
+                          "tp": tp,
+                          "sl": sl,
+                          "time": entry_time,
+                          "atr": atr_value
+                      })
+
+                      last_entry_price = entry_price
+
+              # --------------------------------------
+              # Manage active burst
+              # --------------------------------------
+
+              if burst_entries:
+
+                  remaining = []
+
+                  for trade in burst_entries:
+
+                      direction = trade["direction"]
+
+                      entry = trade["entry"]
+                      tp = trade["tp"]
+                      sl = trade["sl"]
+
+                      high = float(row["high"])
+                      low = float(row["low"])
+
+                      exit_price = None
+                      exit_reason = None
+
+                      if direction == 1:
+
+                          # Conservative assumption:
+                          # if both TP and SL occur
+                          # in the same candle, SL wins.
+                          if low <= sl:
+                              exit_price = sl
+                              exit_reason = "SL"
+
+                          elif high >= tp:
+                              exit_price = tp
+                              exit_reason = "TP"
+
+                      else:
+
+                          if high >= sl:
+                              exit_price = sl
+                              exit_reason = "SL"
+
+                          elif low <= tp:
+                              exit_price = tp
+                              exit_reason = "TP"
+
+                      # Maximum holding time
+                      if exit_price is None:
+
+                          minutes_held = (
+                              row.name -
+                              trade["time"]
+                          ).total_seconds() / 60
+
+                          if minutes_held >= MAX_HOLD_MINUTES:
+
+                              exit_price = price
+                              exit_reason = "TIME"
+
+                      if exit_price is None:
+
+                          remaining.append(
+                              trade
+                          )
+
+                          continue
+
+                      # --------------------------------
+                      # P/L approximation
+                      # --------------------------------
+
+                      if direction == 1:
+                          price_move = (
+                              exit_price -
+                              entry
+                          )
+                      else:
+                          price_move = (
+                              entry -
+                              exit_price
+                          )
+
+                      # Gold futures price movement
+                      # is converted here to a simple
+                      # normalized result using 0.01
+                      # position size.
+                      pnl = (
+                          price_move *
+                          ENTRY_SIZE
+                      )
+
+                      balance += pnl
+
+                      trades.append({
+                          "burst_id": burst_id,
+                          "entry_time": trade["time"],
+                          "exit_time": row.name,
+                          "direction":
+                              "BUY"
+                              if direction == 1
+                              else "SELL",
+                          "entry": entry,
+                          "exit": exit_price,
+                          "tp": tp,
+                          "sl": sl,
+                          "atr": trade["atr"],
+                          "reason": exit_reason,
+                          "pnl": pnl,
+                          "balance": balance
+                      })
+
+                  burst_entries = remaining
+
+          # ------------------------------------------
+          # Close remaining trades
+          # ------------------------------------------
+
+          if burst_entries:
+
+              final_price = float(
+                  m1.iloc[-1]["close"]
+              )
+
+              final_time = m1.index[-1]
+
+              for trade in burst_entries:
+
+                  if trade["direction"] == 1:
+                      price_move = (
+                          final_price -
+                          trade["entry"]
+                      )
+                  else:
+                      price_move = (
+                          trade["entry"] -
+                          final_price
+                      )
+
+                  pnl = (
+                      price_move *
+                      ENTRY_SIZE
+                  )
+
+                  balance += pnl
+
+                  trades.append({
+                      "burst_id": burst_id,
+                      "entry_time": trade["time"],
+                      "exit_time": final_time,
+                      "direction":
+                          "BUY"
+                          if trade["direction"] == 1
+                          else "SELL",
+                      "entry": trade["entry"],
+                      "exit": final_price,
+                      "tp": trade["tp"],
+                      "sl": trade["sl"],
+                      "atr": trade["atr"],
+                      "reason": "END_OF_DATA",
+                      "pnl": pnl,
+                      "balance": balance
+                  })
+
+
+          # ------------------------------------------
+          # Results
+          # ------------------------------------------
+
+          trades_df = pd.DataFrame(trades)
+
+          output_dir = "backtest_results"
+          os.makedirs(output_dir, exist_ok=True)
+
+          if trades_df.empty:
+
+              print("")
+              print("NO TRADES GENERATED")
+              print("")
+
+              summary = {
+                  "initial_balance":
+                      INITIAL_BALANCE,
+                  "final_balance":
+                      INITIAL_BALANCE,
+                  "total_pnl": 0,
+                  "trades": 0,
+                  "wins": 0,
+                  "losses": 0,
+                  "win_rate": 0,
+                  "max_drawdown": 0
+              }
+
+          else:
+
+              trades_df.to_csv(
+                  os.path.join(
+                      output_dir,
+                      "trades.csv"
+                  ),
+                  index=False
+              )
+
+              wins = (
+                  trades_df["pnl"] > 0
+              ).sum()
+
+              losses = (
+                  trades_df["pnl"] <= 0
+              ).sum()
+
+              total = len(trades_df)
+
+              win_rate = (
+                  wins / total * 100
+              )
+
+              equity = trades_df["balance"]
+
+              running_max = equity.cummax()
+
+              drawdown = (
+                  running_max -
+                  equity
+              )
+
+              max_drawdown = (
+                  drawdown.max()
+              )
+
+              total_pnl = (
+                  trades_df["pnl"].sum()
+              )
+
+              buy_count = (
+                  trades_df["direction"] == "BUY"
+              ).sum()
+
+              sell_count = (
+                  trades_df["direction"] == "SELL"
+              ).sum()
+
+              burst_count = (
+                  trades_df["burst_id"].nunique()
+              )
+
+              avg_pnl = (
+                  trades_df["pnl"].mean()
+              )
+
+              summary = {
+                  "initial_balance":
+                      INITIAL_BALANCE,
+
+                  "final_balance":
+                      balance,
+
+                  "total_pnl":
+                      total_pnl,
+
+                  "trades":
+                      total,
+
+                  "wins":
+                      int(wins),
+
+                  "losses":
+                      int(losses),
+
+                  "win_rate":
+                      win_rate,
+
+                  "max_drawdown":
+                      max_drawdown,
+
+                  "buy_trades":
+                      int(buy_count),
+
+                  "sell_trades":
+                      int(sell_count),
+
+                  "burst_count":
+                      int(burst_count),
+
+                  "average_trade_pnl":
+                      avg_pnl
+              }
+
+          summary_df = pd.DataFrame(
+              [summary]
+          )
+
+          summary_df.to_csv(
+              os.path.join(
+                  output_dir,
+                  "backtest_summary.csv"
+              ),
+              index=False
+          )
+
+          with open(
+              os.path.join(
+                  output_dir,
+                  "backtest_summary.txt"
+              ),
+              "w",
+              encoding="utf-8"
+          ) as f:
+
+              f.write(
+                  "QuantumGold Rapid Burst Backtest\n"
+              )
+
+              f.write(
+                  "================================\n\n"
+              )
+
+              for key, value in summary.items():
+
+                  f.write(
+                      f"{key}: {value}\n"
+                  )
+
+          print("")
+          print("==========================================")
+          print("BACKTEST RESULT")
+          print("==========================================")
+
+          for key, value in summary.items():
+
+              print(
+                  f"{key}: {value}"
+              )
+
+          print("")
+          print(
+              "Results saved to backtest_results/"
+          )
+
+          PY
+
+          python rapid_burst_engine.py
+
+
+      # ==========================================
+      # 7) Display final results
+      # ==========================================
+      - name: Display backtest results
+        run: |
+
+          echo ""
+          echo "=========================================="
+          echo "FINAL BACKTEST FILES"
+          echo "=========================================="
+
+          find backtest_results \
+            -maxdepth 2 \
+            -type f \
+            -print
+
+          echo ""
+          echo "=========================================="
+          echo "SUMMARY"
+          echo "=========================================="
+
+          if [ -f backtest_results/backtest_summary.txt ]; then
+            cat backtest_results/backtest_summary.txt
+          fi
+
+
+      # ==========================================
+      # 8) Upload everything
+      # ==========================================
+      - name: Upload Rapid Burst results
         uses: actions/upload-artifact@v4
         with:
-          name: QuantumGold-XAUUSD-Backtest-Data
-          path: backtest_data/
+          name: QuantumGold-RapidBurst-Backtest-Results
+          path: |
+            backtest_data/
+            backtest_results/
           if-no-files-found: error
           retention-days: 30
