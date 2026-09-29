@@ -1,0 +1,62 @@
+name: QuantumGold - Capture XAUUSD Historical Data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  capture-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy yfinance ta requests
+
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Capture XAUUSD historical data
+        env:
+          DATA_CAPTURE_MODE: "1"
+          DATA_CAPTURE_SYMBOL: "GC=F"
+          DATA_CAPTURE_DIR: "backtest_data"
+          DATA_CAPTURE_INTERVALS: "1m,5m,15m"
+
+          ACCOUNT_BALANCE: "50"
+          BASE_RISK_PCT: "1.0"
+          MICRO_ACCOUNT_THRESHOLD: "100"
+          MICRO_RISK_PCT: "1.0"
+          MAX_RISK_PCT: "1.0"
+
+        run: |
+          python QuantumGold_RapidBurst_Backtest.py
+
+      - name: Show captured files
+        run: |
+          echo "===== BACKTEST DATA ====="
+          find backtest_data -maxdepth 2 -type f -print
+          echo "========================="
+
+          if [ -f backtest_data/manifest.csv ]; then
+            echo "===== MANIFEST ====="
+            cat backtest_data/manifest.csv
+            echo "===================="
+          fi
+
+      - name: Upload historical data
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuantumGold-XAUUSD-Backtest-Data
+          path: backtest_data/
+          if-no-files-found: error
+          retention-days: 30
